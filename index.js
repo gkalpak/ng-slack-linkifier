@@ -422,10 +422,17 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     _addListeners(node) {
+      const colorPerState = {closed: 'red', draft: 'gray', merged: 'darkorchid', open: 'green'};
       const processedNodes = new Set();
 
       node.querySelectorAll(`.${CLASS_GITHUB_LINK}:not(.${CLASS_POST_PROCESSED})`).forEach(link => {
         processedNodes.add(link);
+
+        const linkData = link.dataset;
+
+        const owner = linkData.nslOwner;
+        const repo = linkData.nslRepo;
+        const number = linkData.nslNumber;
 
         let interactionId = 0;
 
@@ -433,17 +440,9 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           try {
             const id = interactionId;
 
-            const target = evt.target;
-            const targetData = target.dataset;
-
-            const owner = targetData.nslOwner;
-            const repo = targetData.nslRepo;
-            const number = targetData.nslNumber;
-
             const info = await this._ghUtils.getIssueInfo(owner, repo, number);
             if (id !== interactionId) return;  /* Abort if already "mouseleft". */
 
-            const colorPerState = {closed: 'red', draft: 'gray', merged: 'darkorchid', open: 'green'};
             const description = info.description.replace(/^<!--[^]*?-->\s*/, '');
             const html = `
               <p style="display: flex; font-size: 0.75em; justify-content: space-between;">
