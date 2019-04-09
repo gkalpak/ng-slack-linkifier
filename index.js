@@ -440,6 +440,9 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           try {
             const id = interactionId;
 
+            await new Promise(resolve => setTimeout(resolve, 500));
+            if (id !== interactionId) return;  /* Abort if already "mouseleft". */
+
             const info = await this._ghUtils.getIssueInfo(owner, repo, number);
             if (id !== interactionId) return;  /* Abort if already "mouseleft". */
 
@@ -484,7 +487,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
               <pre>${description}</pre>
             `;
 
-            this._uiUtils.scheduleShowPopup(html, evt, 500);
+            this._uiUtils.showPopup(html, evt);
           } catch (err) {
             this._onError(err);
           }
