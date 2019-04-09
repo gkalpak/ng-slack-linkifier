@@ -19,6 +19,36 @@ If you are using the deskotp app for Slack, you need to [start the app in a spec
 able to open DevTools.
 
 
+## Test
+
+Currently there are no automated tests :scream: :scream: :scream:
+
+This comment is a good starting point for manual testing:
+
+```
+*Markdown links*
+- This is a [markdown link](https://google.com/).
+- This is a [markdown link to a GitHub issue](https://github.com/angular/angular/issues/12345).
+- This is markdown link references [GitHub PR #23456](https://google.com/), but points to a different URL.
+- This is a [markdown link to a Jira issue](https://angular-team.atlassian.com/browse/FW-1234).
+- This is markdown link references [Jira issue TOOL-23](https://google.com/), but points to a different URL.
+
+*GitHub issues/PRs*
+- This is (supposedly) a GitHub PR: https://github.com/angular/angular/pull/2345 (or is it?)
+- This is (supposedly) another GitHub PR: https://github.com/angular/angular-cli/pull/345 (for `angular-cli`)
+- This is (supposedly) yet another GitHub PR: https://github.com/reactivex/rxjs/pull/45
+- These are "raw" references to GitHub issues/PRs: #2345, angular-cli#345, reactivex/rxjs#45 (see the link?)
+- These are not, but still recognized as such: #999999, notexists#999999, https://github.com/neither/this/issues/999999
+
+*Jira issues*
+- This is (supposedly) a Jira issue: https://angular-team.atlassian.net/browse/FW-1234 (or is it?)
+- This is (supposedly) another Jirs issue: (https://angular-team.atlassian.net/browse/TOOL-345) (parenthesized)
+- This is (supposedly) yet another Jirs issue: https://angular-team.atlassian.net/browse/COMP-45
+- These are "raw" references to Jira issues: FW-1234, TOOL-345, COMP-45 (see the link? :stuck_out_tongue:)
+- These are not, but still recongized as such: NOTEXISTS-1337, NEITHERTHIS-7331 ¯\_(ツ)_/¯
+```
+
+
 ## TODO
 
 Things I want to (but won't necessarily) do:
@@ -33,7 +63,6 @@ Things I want to (but won't necessarily) do:
   - Commit URLs.
   - File URLs (e.g. https://github.com/angular/angular/blob/84be7c52d/path/to/file.ext#L13-L37).
   - Jason's `https://git.io/fjLYY/12345` shortened URLs.
-  - URLs from other owners.
 - Show info for Jira issues (requires Jira access token).
 
 - Add tests.
