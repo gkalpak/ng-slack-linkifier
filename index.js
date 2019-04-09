@@ -428,6 +428,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       node.querySelectorAll(`.${CLASS_GITHUB_LINK}:not(.${CLASS_POST_PROCESSED})`).forEach(link => {
         processedNodes.add(link);
 
+        const linkStyle = link.style;
         const linkData = link.dataset;
 
         const owner = linkData.nslOwner;
@@ -440,8 +441,12 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           try {
             const id = interactionId;
 
+            linkStyle.cursor = 'help';
+
             await new Promise(resolve => setTimeout(resolve, 500));
             if (id !== interactionId) return;  /* Abort if already "mouseleft". */
+
+            linkStyle.cursor = 'progress';
 
             const info = await this._ghUtils.getIssueInfo(owner, repo, number);
             if (id !== interactionId) return;  /* Abort if already "mouseleft". */
@@ -495,6 +500,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
         const onMouseleave = () => {
           ++interactionId;
+          linkStyle.cursor = '';
           this._uiUtils.scheduleHidePopup(500);
         };
 
