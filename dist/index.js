@@ -1,5 +1,5 @@
 javascript:/* eslint-disable-line no-unused-labels *//*
- * # NgSlackLinkifier v0.1.0
+ * # NgSlackLinkifier v0.1.1
  *
  * ## What it does
  *
@@ -42,7 +42,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   /* Constants */
   const NAME = 'NgSlackLinkifier';
-  const VERSION = '0.1.0';
+  const VERSION = '0.1.1';
 
   const CLASS_GITHUB_LINK = 'nsl-github';
   const CLASS_JIRA_LINK = 'nsl-jira';
@@ -381,6 +381,10 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       this._prefix = `[${prefix}]`;
     }
 
+    cleanUp() {
+      /* Nothing to clean up. */
+    }
+
     log(...args) {
       console.log(this._prefix, ...args);
     }
@@ -419,16 +423,20 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     cleanUp() {
+      this._logUtils.log('Uninstalling...');
+
       this._destroyedDeferred.reject(new IgnoredError('Cleaning up.'));
       this._cleanUpFns.forEach(fn => fn());
       this._cleanUpFns = [];
+
+      this._logUtils.log('Uninstalled.');
     }
 
     async main() {
       try {
-        this._logUtils.log('Installing...');
-
         if (window.__ngSlackLinkifyCleanUp) window.__ngSlackLinkifyCleanUp();
+
+        this._logUtils.log('Installing...');
 
         window.__ngSlackLinkifyCleanUp = () => {
           this.cleanUp();
@@ -844,11 +852,12 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         className: 'nsl-dialog-backdrop',
         innerHTML: `
           <div class="nsl-dialog">
+            <header class="nsl-dialog-header">${NAME} v${VERSION}</header>
             <section class="nsl-dialog-content">${html}</section>
-            <section class="nsl-dialog-actions">
+            <footer class="nsl-dialog-actions">
               <button class="nsl-dialog-btn-ok">${okBtnText}</button>
               <button class="nsl-dialog-btn-cancel">${cancelBtnText}</button>
-            </section>
+            </footer>
           </div>
         `,
         style: `
@@ -882,6 +891,13 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           overflow: auto;
           padding: 15px;
           pointer-events: all;
+        `,
+      });
+      Object.assign(dialog.querySelector('.nsl-dialog-header'), {
+        style: `
+          color: gray;
+          font-size: 0.75em;
+          text-align: right;
         `,
       });
       Object.assign(dialog.querySelector('.nsl-dialog-content'), {
