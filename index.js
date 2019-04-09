@@ -376,12 +376,31 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
   }
 
+  class LogUtils {
+    constructor(prefix) {
+      this._prefix = `[${prefix}]`;
+    }
+
+    log(...args) {
+      console.log(this._prefix, ...args);
+    }
+
+    warn(...args) {
+      console.warn(this._prefix, ...args);
+    }
+
+    error(...args) {
+      console.error(this._prefix, ...args);
+    }
+  }
+
   class Program {
     constructor() {
       this._KEYS = {
         githubToken: 1,
       };
 
+      this._logUtils = new LogUtils(`${NAME} v${VERSION}`);
       this._secretUtils = new SecretUtils();
       this._storageUtils = new StorageUtils(NAME);
       this._linkifier = new Linkifier(node => this._addListeners(node));
@@ -390,6 +409,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
       this._cleanUpFns = [
         () => this._linkifier.cleanUp(),
+        () => this._logUtils.cleanUp(),
         () => this._secretUtils.cleanUp(),
         () => this._storageUtils.cleanUp(),
         () => this._uiUtils.cleanUp(),
@@ -406,6 +426,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
     async main() {
       try {
+        this._logUtils.log('Installing...');
+
         if (window.__ngSlackLinkifyCleanUp) window.__ngSlackLinkifyCleanUp();
 
         window.__ngSlackLinkifyCleanUp = () => {
@@ -413,15 +435,13 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           window.__ngSlackLinkifyCleanUp = null;
         };
 
-        console.log('Installing NgSlackLinkifier...');
-
         await Promise.race([this._init(), this._destroyedDeferred.promise]);
 
         const root = document.querySelector('#messages_container');
         this._linkifier.processAll([root], true);
         this._linkifier.observe(root);
 
-        console.log('Installed NgSlackLinkifier.');
+        this._logUtils.log('Installed.');
       } catch (err) {
         this._onError(err);
       }
@@ -628,7 +648,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
               `Unable to store the ${name}: Invalid data provided (token or storage target).\n` +
               '(Proceeding without a token.)';
 
-            console.warn(warnMsg);
+            this._logUtils.warn(warnMsg);
             this._uiUtils.showSnackbar(`<div style="color: orange;">${warnMsg.replace(/\n/g, '<br />')}</div>`, 5000);
 
             return;
@@ -645,7 +665,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     _onError(err) {
       if (err instanceof IgnoredError) return;
 
-      console.error(err);
+      this._logUtils.error(err);
       this._uiUtils.showSnackbar(
         '<pre style="background-color: white; border: none; color: red;">' +
           `<b>${err.message || err}</b><br />` +
