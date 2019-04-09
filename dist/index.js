@@ -1,5 +1,5 @@
 javascript:/* eslint-disable-line no-unused-labels *//*
- * # NgSlackLinkifier v0.1.1
+ * # NgSlackLinkifier v0.1.2
  *
  * ## What it does
  *
@@ -42,7 +42,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   /* Constants */
   const NAME = 'NgSlackLinkifier';
-  const VERSION = '0.1.1';
+  const VERSION = '0.1.2';
 
   const CLASS_GITHUB_LINK = 'nsl-github';
   const CLASS_JIRA_LINK = 'nsl-jira';
@@ -206,7 +206,12 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     processAll(nodes, forcePostProcess = false) {
-      const selectors = '.c-message__body, .c-message_attachment__body';
+      /*
+       * - `.c-message__body`: Normal messages.
+       * - `.c-message_attachment__body`: Attachments (e.g. posted by GeekBot in #fw-standup).
+       * - `.c-message_kit__text`: Thread messages.
+       */
+      const selectors = '.c-message__body, .c-message_attachment__body, .c-message_kit__text';
       const processedParents = new Set();
 
       nodes.forEach(n => {
@@ -445,7 +450,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
         await Promise.race([this._init(), this._destroyedDeferred.promise]);
 
-        const root = document.querySelector('#messages_container');
+        const root = document.querySelector('#client_body');
         this._linkifier.processAll([root], true);
         this._linkifier.observe(root);
 
