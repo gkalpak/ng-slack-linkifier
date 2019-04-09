@@ -60,15 +60,15 @@ Things I want to (but won't necessarily) do:
 - Add support for resetting prompts via the UI.
 - Recognize, shorten and show info for more GitHub URLs.
   - More PR URL formats (e.g. `/files`?, `#issuecomment-12345` (and similar forms)?).
-  - Commit URLs.
+  - Commit (and PR commit) URLs.
   - File URLs (e.g. https://github.com/angular/angular/blob/84be7c52d/path/to/file.ext#L13-L37).
   - Jason's `https://git.io/fjLYY/12345` shortened URLs.
 - Show info for Jira issues (requires Jira access token).
 
 - Add tests.
-- Break up into multiple files.
 - Switch to TypeScript.
 - Publish minified version.
+- Break up into multiple files.
 
 - Convert to a Chrome Extension(?).
 
