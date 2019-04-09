@@ -381,6 +381,10 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       this._prefix = `[${prefix}]`;
     }
 
+    cleanUp() {
+      /* Nothing to clean up. */
+    }
+
     log(...args) {
       console.log(this._prefix, ...args);
     }
