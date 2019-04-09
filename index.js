@@ -5,15 +5,17 @@ javascript:/* eslint-disable-line no-unused-labels *//*
  *
  * - Markdown-like links (of the form `[some text](/some/url)`) to actual links.
  *
- * - URLs to GitHub issues/PRs for Angular repositories to short links. E.g.:
+ * - URLs to GitHub issues/PRs to short links. E.g.:
  *   - `https://github.com/angular/angular/issues/12345` --> `#12345`
  *   - `https://github.com/angular/angular-cli/pull/23456` --> `angular-cli#23456`
- *   - `https://github.com/angular/material2/pull/34567` --> `material2#34567`
+ *   - `https://github.com/not-angular/some-lib/pull/34567` --> `not-angular/material2#34567`
  *
- * - GitHub issues/PRs for Angular repositories to links. (Requires a `#`-prefix.) E.g.:
- *   - `#12345` or `angular#12345` --> `[#12345](https://github.com/angular/angular/issues/12345)`
+ * - GitHub issues/PRs of the format `[[<owner>/]<repo>]#<issue-or-pr>` to links. If omitted `<owner>` and `<repo>`
+ *   default to `angular`. E.g.:
+ *   - `#12345` or `angular#12345` or `angular/angular#12345` -->
+ *     `[#12345](https://github.com/angular/angular/issues/12345)`
  *   - `angular-cli#23456` --> link to `https://github.com/angular/angular-cli/issues/23456`
- *   - `material2#12345` --> link to `https://github.com/angular/material2/issues/34567`
+ *   - `not-angular/some-lib#12345` --> link to `https://github.com/not-angular/some-lib/issues/34567`
  *
  * - URLs to Jira-like issues for `angular-team` to short links. (Recognizes the format `XYZ-<number>`.) E.g.:
  *   - `https://angular-team.atlassian.net/browse/FW-12345` --> `FW-12345`
@@ -69,8 +71,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       this._cache.clear();
     }
 
-    getIssueInfo(repo, issue) {
-      const url = `https://api.github.com/repos/angular/${repo}/issues/${issue}`;
+    getIssueInfo(owner, repo, issue) {
+      const url = `https://api.github.com/repos/${owner}/${repo}/issues/${issue}`;
       return this._getJson(url).
         then(data => ({
           number: issue,
@@ -85,7 +87,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           labels: data.labels.map(l => l.name),
         })).
         catch(err => {
-          throw new Error(`Error getting GitHub info for ${repo}#${issue}:\n${err.message || err}`);
+          throw new Error(`Error getting GitHub info for ${owner}/${repo}#${issue}:\n${err.message || err}`);
         });
     }
 
@@ -235,10 +237,11 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       let t;
 
       while ((t = treeWalker.nextNode())) {
-        const textMatch = /([\w-]*)#(\d+)\b/.exec(t.textContent);
+        const textMatch = /(?:(?:([\w-]+)\/)?([\w-]+))?#(\d+)\b/.exec(t.textContent);
 
         if (textMatch) {
-          const url = `https://github.com/angular/${textMatch[1] || 'angular'}/issues/${textMatch[2]}`;
+          const [, owner = 'angular', repo = 'angular', issue] = textMatch;
+          const url = `https://github.com/${owner}/${repo}/issues/${issue}`;
           const link = Object.assign(document.createElement('a'), {
             href: url,
             target: '_blank',
@@ -256,21 +259,32 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       }
 
       node.querySelectorAll(`a:not(.${CLASS_PROCESSED})`).forEach(link => {
-        const hrefMatch = /^https:\/\/github\.com\/angular\/([\w-]+)\/(?:issues|pull)\/(\d+)$/.exec(link.href) ||
+        const hrefMatch = /^https:\/\/github\.com\/([\w-]+)\/([\w-]+)\/(?:issues|pull)\/(\d+)$/.exec(link.href) ||
           /* eslint-disable-next-line max-len */
-          new RegExp(`^https://slack-redir\\.net/link\\?url=https${S}${I}${I}github\\.com${I}angular${I}([\\w-]+)${I}(?:issues|pull)${I}(\\d+)$`).exec(link.href);
+          new RegExp(`^https://slack-redir\\.net/link\\?url=https${S}${I}${I}github\\.com${I}([\\w-]+)${I}([\\w-]+)${I}(?:issues|pull)${I}(\\d+)$`).exec(link.href);
 
         if (hrefMatch) {
+          const [, owner, repo, issue] = hrefMatch;
+
           link.classList.add(CLASS_GITHUB_LINK);
-          link.dataset.nslRepo = hrefMatch[1] || 'angular';
-          link.dataset.nslNumber = hrefMatch[2];
+          link.dataset.nslOwner = owner;
+          link.dataset.nslRepo = repo;
+          link.dataset.nslNumber = issue;
+
           changed = true;
         }
 
-        const htmlMatch = /^https:\/\/github\.com\/angular\/([\w-]+)\/(?:issues|pull)\/(\d+)$/.exec(link.innerHTML);
+        const htmlMatch = /^https:\/\/github\.com\/([\w-]+)\/([\w-]+)\/(?:issues|pull)\/(\d+)$/.exec(link.innerHTML);
 
         if (htmlMatch) {
-          link.innerHTML = `<b>${(htmlMatch[1] === 'angular') ? '' : htmlMatch[1]}#${htmlMatch[2]}</b>`;
+          const [, owner, repo, issue] = htmlMatch;
+
+          const isOwnerNg = owner === 'angular';
+          const isRepoNg = repo === 'angular';
+          const repoSlug = `${isOwnerNg ? '' : `${owner}/`}${(isOwnerNg && isRepoNg) ? '' : repo}`;
+
+          link.innerHTML = `<b>${repoSlug}#${issue}</b>`;
+
           changed = true;
         }
       });
@@ -416,10 +430,11 @@ javascript:/* eslint-disable-line no-unused-labels *//*
             const target = evt.target;
             const targetData = target.dataset;
 
+            const owner = targetData.nslOwner;
             const repo = targetData.nslRepo;
             const number = targetData.nslNumber;
 
-            const info = await this._ghUtils.getIssueInfo(repo, number);
+            const info = await this._ghUtils.getIssueInfo(owner, repo, number);
             if (id !== interactionId) return;  /* Abort if already "mouseleft". */
 
             const colorPerState = {closed: 'red', draft: 'gray', merged: 'darkorchid', open: 'green'};
