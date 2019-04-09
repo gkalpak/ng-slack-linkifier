@@ -1,0 +1,28 @@
+{
+  "private": true,
+  "name": "@gkalpak/ng-slack-linkifier",
+  "version": "0.0.0",
+  "description": "Improves messages, especially links, in the `angular-team` Slack.",
+  "main": "index.js",
+  "keywords": [
+    "Slack",
+    "Utility"
+  ],
+  "scripts": {
+    "lint": "eslint ./",
+    "test": "run-s lint && node --print \"'No tests yet.\\n'\" && exit 1",
+    "postversion": "git push && git push --tags"
+  },
+  "license": "Unlicense",
+  "author": "gkalpak <kalpakas.g@gmail.com>",
+  "homepage": "https://github.com/gkalpak/ng-slack-linkifier#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gkalpak/ng-slack-linkifier.git"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "eslint": "^5.16.0",
+    "npm-run-all": "^4.1.5"
+  }
+}
