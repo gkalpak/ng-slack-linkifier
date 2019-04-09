@@ -217,7 +217,9 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       nodes.forEach(n => {
         if (processedParents.has(n.parentNode)) return;
 
-        const isAncestorOfInterest = n.closest ? n.closest(selectors) : n.parentNode.closest(selectors);
+        const isAncestorOfInterest = n.closest ?
+          n.closest(selectors) :
+          (n.parentNode && n.parentNode.closest(selectors));
 
         if (isAncestorOfInterest) {
           /* A child of a message body element was added. */
