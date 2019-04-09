@@ -423,16 +423,20 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     cleanUp() {
+      this._logUtils.log('Uninstalling...');
+
       this._destroyedDeferred.reject(new IgnoredError('Cleaning up.'));
       this._cleanUpFns.forEach(fn => fn());
       this._cleanUpFns = [];
+
+      this._logUtils.log('Uninstalled.');
     }
 
     async main() {
       try {
-        this._logUtils.log('Installing...');
-
         if (window.__ngSlackLinkifyCleanUp) window.__ngSlackLinkifyCleanUp();
+
+        this._logUtils.log('Installing...');
 
         window.__ngSlackLinkifyCleanUp = () => {
           this.cleanUp();
