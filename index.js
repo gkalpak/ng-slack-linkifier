@@ -41,7 +41,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
   /* Constants */
   const CLASS_GITHUB_LINK = 'nsl-github';
   const CLASS_JIRA_LINK = 'nsl-jira';
-  const CLASS_PROCESSED = `nsl-processed-${Date.now()}`;
+  const CLASS_PROCESSED = 'nsl-processed';
+  const CLASS_POST_PROCESSED = 'nsl-post-processed';
   /* Break up so that they are not auto-decoded when used as bookmarklet. */
   const S = '%' + '3A';
   const I = '%' + '2F';
@@ -198,7 +199,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       this._observer.observe(elem, {childList: true, subtree: true});
     }
 
-    processAll(nodes) {
+    processAll(nodes, forcePostProcess = false) {
       const selectors = '.c-message__body, .c-message_attachment__body';
       const processedParents = new Set();
 
@@ -209,27 +210,28 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
         if (isAncestorOfInterest) {
           /* A child of a message body element was added. */
-          this._processNode(n.parentNode);
+          this._processNode(n.parentNode, forcePostProcess);
         } else if (n.querySelectorAll) {
           /* An element that might contain message bodies was added. */
-          n.querySelectorAll(selectors).forEach(n => this._processNode(n));
+          n.querySelectorAll(selectors).forEach(n => this._processNode(n, forcePostProcess));
         }
       });
     }
 
-    _processNode(node) {
-      const changed = [
-        this._processNodeMdLinks(node),
-        this._processNodeGithub(node),
-        this._processNodeJira(node),
-      ];
+    _processNode(node, forcePostProcess) {
+      const processedNodes = new Set([
+        ...this._processNodeMdLinks(node),
+        ...this._processNodeGithub(node),
+        ...this._processNodeJira(node),
+      ]);
 
-      if (changed.some(Boolean)) this._postProcessNode(node);
+      processedNodes.forEach(n => n.classList.add(CLASS_PROCESSED));
+      if (forcePostProcess || processedNodes.size) this._postProcessNode(node);
     }
 
     /* Process GitHub-like issues/PRs. */
     _processNodeGithub(node) {
-      let changed = false;
+      const processedNodes = new Set();
 
       const acceptNode = t => ((t.parentNode.nodeName === 'A') || (t.parentNode.parentNode.nodeName === 'A')) ?
         NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
@@ -254,7 +256,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           t.after(link);
           link.after(trailingText);
 
-          changed = true;
+          processedNodes.add(link);
         }
       }
 
@@ -271,7 +273,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           link.dataset.nslRepo = repo;
           link.dataset.nslNumber = issue;
 
-          changed = true;
+          processedNodes.add(link);
         }
 
         const htmlMatch = /^https:\/\/github\.com\/([\w-]+)\/([\w-]+)\/(?:issues|pull)\/(\d+)$/.exec(link.innerHTML);
@@ -285,16 +287,16 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
           link.innerHTML = `<b>${repoSlug}#${issue}</b>`;
 
-          changed = true;
+          processedNodes.add(link);
         }
       });
 
-      return changed;
+      return processedNodes;
     }
 
     /* Process Jira-like issues. */
     _processNodeJira(node) {
-      let changed = false;
+      const processedNodes = new Set();
 
       const acceptNode = t => ((t.parentNode.nodeName === 'A') || (t.parentNode.parentNode.nodeName === 'A')) ?
         NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
@@ -318,7 +320,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           t.after(link);
           link.after(trailingText);
 
-          changed = true;
+          processedNodes.add(link);
         }
       }
 
@@ -330,23 +332,23 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         if (hrefMatch) {
           link.classList.add(CLASS_JIRA_LINK);
           link.dataset.nslNumber = hrefMatch[1];
-          changed = true;
+          processedNodes.add(link);
         }
 
         const htmlMatch = /^https:\/\/angular-team\.atlassian\.net\/browse\/([A-Z]+-\d+)$/.exec(link.innerHTML);
 
         if (htmlMatch) {
           link.innerHTML = `<b>${htmlMatch[1]}</b>`;
-          changed = true;
+          processedNodes.add(link);
         }
       });
 
-      return changed;
+      return processedNodes;
     }
 
     /* Process markdown-like links. */
     _processNodeMdLinks(node) {
-      let changed = false;
+      const processedNodes = new Set();
 
       node.querySelectorAll(`a:not(.${CLASS_PROCESSED})`).forEach(link => {
         const prev = link.previousSibling;
@@ -360,11 +362,11 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           next.textContent = next.textContent.slice(nextMatch[0].length);
 
           link.innerHTML = `<b>${prevMatch[1]}</b>`;
-          changed = true;
+          processedNodes.add(link);
         }
       });
 
-      return changed;
+      return processedNodes;
     }
   }
 
@@ -410,7 +412,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         await Promise.race([this._init(), this._destroyedDeferred.promise]);
 
         const root = document.querySelector('#messages_container');
-        this._linkifier.processAll([root]);
+        this._linkifier.processAll([root], true);
         this._linkifier.observe(root);
 
         console.log('Installed NgSlackLinkifier.');
@@ -420,7 +422,11 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     _addListeners(node) {
-      node.querySelectorAll(`.${CLASS_GITHUB_LINK}:not(.${CLASS_PROCESSED})`).forEach(a => {
+      const processedNodes = new Set();
+
+      node.querySelectorAll(`.${CLASS_GITHUB_LINK}:not(.${CLASS_POST_PROCESSED})`).forEach(link => {
+        processedNodes.add(link);
+
         let interactionId = 0;
 
         const onMouseenter = async evt => {
@@ -490,16 +496,23 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           this._uiUtils.scheduleHidePopup(500);
         };
 
-        a.addEventListener('mouseenter', onMouseenter);
-        a.addEventListener('mouseleave', onMouseleave);
+        link.addEventListener('mouseenter', onMouseenter);
+        link.addEventListener('mouseleave', onMouseleave);
 
         this._cleanUpFns.push(
-          () => a.removeEventListener('mouseenter', onMouseenter),
-          () => a.removeEventListener('mouseleave', onMouseleave));
+          () => link.removeEventListener('mouseenter', onMouseenter),
+          () => link.removeEventListener('mouseleave', onMouseleave));
       });
 
-      node.querySelectorAll(`.${CLASS_JIRA_LINK}:not(.${CLASS_PROCESSED})`).forEach(() => {
+      node.querySelectorAll(`.${CLASS_JIRA_LINK}:not(.${CLASS_POST_PROCESSED})`).forEach(link => {
+        processedNodes.add(link);
+
         /* TODO(gkalpak): Implement popup for Jira issues. */
+      });
+
+      processedNodes.forEach(n => {
+        n.classList.add(CLASS_POST_PROCESSED);
+        this._cleanUpFns.push(() => n.classList.remove(CLASS_POST_PROCESSED));
       });
     }
 
