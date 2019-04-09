@@ -7,16 +7,20 @@ _Use at your own risk!_
 
 ## Description
 
-A script to enhance messages, especially links, in the `angular-team` Slack.
+A script to enhance messages, especially links, in the `angular-team` Slack. See the doc comment in
+[index.js][index] for more details.
 
 
 ## Usage
 
-The code should be run in the context of the [Slack web-app][slack]. For example, you can paste and run the code in
-DevTools or use it as a [bookmarklet].
+The code ([dist/index.js][index-dist]) should be run in the context of the [Slack web-app][slack]. For example, you can
+paste and run the code in DevTools or use it as a [bookmarklet].
 
-If you are using the deskotp app for Slack, you need to [start the app in a special way][slack-app-dev] in order to be
+If you are using the desktop app for Slack, you need to [start the app in a special way][slack-app-dev] in order to be
 able to open DevTools.
+
+The latest release can be found [here][releases].<br />
+The code is also available at `https://cdn.jsdelivr.net/gh/gkalpak/ng-slack-linkifier@X.Y.Z/dist/index.js`.
 
 
 ## Test
@@ -66,7 +70,8 @@ Things I want to (but won't necessarily) do:
 - Show info for Jira issues (requires Jira access token).
 
 - Add tests.
-- Switch to TypeScript.
+- Add CI support.
+- Consider switching to TypeScript. (How does it affect bundle size? Is it worth it?)
 - Publish minified version.
 - Break up into multiple files.
 
@@ -74,5 +79,8 @@ Things I want to (but won't necessarily) do:
 
 
 [bookmarklet]: https://en.wikipedia.org/wiki/Bookmarklet
+[index]: ./index.js
+[index-dist]: ./dist/index.js
+[releases]: https://github.com/gkalpak/ng-slack-linkifier/releases
 [slack]: https://slack.com/
 [slack-app-dev]: https://www.reddit.com/r/Slack/comments/955dro/how_do_i_open_the_chromium_developer_tools_in_the

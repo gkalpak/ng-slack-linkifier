@@ -1,7 +1,9 @@
 javascript:/* eslint-disable-line no-unused-labels *//*
- * # What it does
+ * # NgSlackLinkifier vX.Y.Z-VERSION
  *
- * ## It converts...
+ * ## What it does
+ *
+ * **It converts...**
  *
  * - Markdown-like links (of the form `[some text](/some/url)`) to actual links.
  *
@@ -27,7 +29,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
  *   - `TOOL-23456` --> `[TOOL-23456](https://angular-team.atlassian.net/browse/TOOL-23456)`
  *   - `COMP-34567` --> `[COMP-34567](https://angular-team.atlassian.net/browse/COMP-34567)`
  *
- * ## It shows...
+ * **It shows...**
  *
  * - Popups with basic info (title, description, author, state, labels), when hovering over links to GitHub issues/PRs.
  *
@@ -39,10 +41,14 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 (() => {'use strict';
 
   /* Constants */
+  const NAME = 'NgSlackLinkifier';
+  const VERSION = 'X.Y.Z-VERSION';
+
   const CLASS_GITHUB_LINK = 'nsl-github';
   const CLASS_JIRA_LINK = 'nsl-jira';
   const CLASS_PROCESSED = 'nsl-processed';
   const CLASS_POST_PROCESSED = 'nsl-post-processed';
+
   /* Break up so that they are not auto-decoded when used as bookmarklet. */
   const S = '%' + '3A';
   const I = '%' + '2F';
@@ -55,9 +61,6 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         this.reject = reject;
       });
     }
-  }
-
-  class IgnoredError extends Error {
   }
 
   class GithubUtils {
@@ -137,6 +140,9 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
       return response;
     }
+  }
+
+  class IgnoredError extends Error {
   }
 
   class InMemoryStorage {
@@ -377,7 +383,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       };
 
       this._secretUtils = new SecretUtils();
-      this._storageUtils = new StorageUtils('NgSlackLinkifier');
+      this._storageUtils = new StorageUtils(NAME);
       this._linkifier = new Linkifier(node => this._addListeners(node));
       this._uiUtils = new UiUtils();
       this._ghUtils = null;
@@ -562,7 +568,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
       if (!force && prompts.noCheckOnStartup) return;
 
-      const ctxName = `NgSlackLinkifier-ctx-${Date.now()}`;
+      const ctxName = `${NAME}-ctx-${Date.now()}`;
       const ctx = window[ctxName] = {
         token: '',
         storage: 'local',
