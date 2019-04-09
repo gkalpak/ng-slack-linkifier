@@ -848,11 +848,12 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         className: 'nsl-dialog-backdrop',
         innerHTML: `
           <div class="nsl-dialog">
+            <header class="nsl-dialog-header">${NAME} v${VERSION}</header>
             <section class="nsl-dialog-content">${html}</section>
-            <section class="nsl-dialog-actions">
+            <footer class="nsl-dialog-actions">
               <button class="nsl-dialog-btn-ok">${okBtnText}</button>
               <button class="nsl-dialog-btn-cancel">${cancelBtnText}</button>
-            </section>
+            </footer>
           </div>
         `,
         style: `
@@ -886,6 +887,13 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           overflow: auto;
           padding: 15px;
           pointer-events: all;
+        `,
+      });
+      Object.assign(dialog.querySelector('.nsl-dialog-header'), {
+        style: `
+          color: gray;
+          font-size: 0.75em;
+          text-align: right;
         `,
       });
       Object.assign(dialog.querySelector('.nsl-dialog-content'), {
