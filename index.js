@@ -980,7 +980,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       this._cancelShowPopup();
       this.hidePopup();
 
-      const position = this._calculatePopupPosition(evt);
+      const positioning = this._calculatePopupPositioning(evt);
       const onMouseenter = () => this._cancelHidePopup();
       const onMouseleave = () => this.hidePopup();
 
@@ -993,14 +993,15 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           background-color: white;
           border: 1px solid lightgray;
           border-radius: 6px;
-          bottom: ${position.bottom}px;
+          bottom: ${positioning.bottom};
           box-shadow: 0 0 0 1px rgba(0, 0, 0, .08), 0 4px 12px 0 rgba(0, 0, 0, .12);
-          left: ${position.left}px;
+          left: ${positioning.left};
+          max-height: ${positioning.maxHeight};
           overflow: auto;
           padding: 10px;
           position: fixed;
-          right: ${position.right}px;
-          top: ${position.top}px;
+          right: ${positioning.right};
+          top: ${positioning.top};
           user-select: text;
           z-index: 9999;
         `,
@@ -1073,54 +1074,35 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       ]).then(() => new Promise(resolve => setTimeout(resolve, duration)));
     }
 
-    _calculatePopupPosition(evt) {
+    _calculatePopupPositioning(evt) {
       const idealHeight = 500;
       const idealWidth = 750;
+      const margin = 5;
 
       const targetRect = evt.target.getBoundingClientRect();
 
       const topDistance = targetRect.top;
       const bottomDistance = window.innerHeight - targetRect.bottom;
-      const placement =
-        ((bottomDistance <= idealHeight) && ((topDistance > idealHeight) || (topDistance > bottomDistance))) ?
-          'top' :
-          'bottom';
+      const placeAbove =
+        (bottomDistance <= idealHeight) && ((topDistance > idealHeight) || (topDistance > bottomDistance));
 
       const calculateLeftRight = () => {
         const mid = (targetRect.left + targetRect.right) / 2;
         const halfWidth = idealWidth / 2;
 
-        let left = Math.max(5, mid - halfWidth);
-        let right = Math.min(window.innerWidth - 5, left + idealWidth);
+        let left = Math.max(margin, mid - halfWidth);
+        let right = Math.min(window.innerWidth - margin, left + idealWidth);
 
-        if (right - left < idealWidth) left = Math.max(5, right - idealWidth);
+        if (right - left < idealWidth) left = Math.max(margin, right - idealWidth);
 
-        return {left, right};
-      };
-
-      let rect;
-      switch (placement) {
-        case 'top':
-          rect = {
-            top: Math.max(5, targetRect.top - idealHeight),
-            bottom: targetRect.top,
-            ...calculateLeftRight(),
+        return {left: `${left}px`, right: `${window.innerWidth - right}px`};
           };
-          break;
-        case 'bottom':
-          rect = {
-            top: targetRect.bottom,
-            bottom: Math.min(window.innerHeight - 5, targetRect.bottom + idealHeight),
-            ...calculateLeftRight(),
-          };
-          break;
-      }
 
       return {
-        top: rect.top,
-        bottom: window.innerHeight - rect.bottom,
-        left: rect.left,
-        right: window.innerWidth - rect.right,
+        maxHeight: `${Math.min(idealHeight, (placeAbove ? topDistance : bottomDistance) - margin)}px`,
+        top: placeAbove ? 'auto' : `${targetRect.bottom}px`,
+        bottom: placeAbove ? `${window.innerHeight - targetRect.top}px` : 'auto',
+        ...calculateLeftRight(),
       };
     }
 
