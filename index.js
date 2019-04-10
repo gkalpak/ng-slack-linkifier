@@ -122,6 +122,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           author: this._extractUserInfo(data.user),
           state: data.state,
           labels: data.labels.map(l => l.name),
+          isPr: data.html_url.endsWith(`/pull/${data.number}`),
         })).
         catch(err => {
           throw new Error(`Error getting GitHub info for ${owner}/${repo}#${number}:\n${err.message || err}`);
@@ -781,11 +782,14 @@ javascript:/* eslint-disable-line no-unused-labels *//*
               ">
             ${info.state.toUpperCase()}
           </span>
-          <b>${info.title}</b>
-          <span style="color: gray; margin-left: 5px;">#${info.number}</span>
+          <b style="flex: auto;">${info.title}</b>
+          <span style="color: gray; margin-left: 5px; white-space: nowrap;">
+            <span style="color: lightgray;">${info.isPr ? 'PR' : 'Issue'}:</span>
+            #${info.number}
+          </span>
         </p>
         <br />
-        <pre>${description}</pre>
+        <pre>${description || '<i style="color: gray;">No description.</i>'}</pre>
       `;
     }
 
