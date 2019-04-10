@@ -233,6 +233,13 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       });
     }
 
+    _acceptNodeInTextNodeWalker(node) {
+      return (node.parentNode &&
+          (node.parentNode.nodeName !== 'A') &&
+          (!node.parentNode.parentNode || (node.parentNode.parentNode.nodeName !== 'A'))) ?
+        NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+    }
+
     _processNode(node, forcePostProcess) {
       const processedNodes = new Set([
         ...this._processNodeMdLinks(node),
@@ -248,8 +255,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     _processNodeGithub(node) {
       const processedNodes = new Set();
 
-      const acceptNode = t => ((t.parentNode.nodeName === 'A') || (t.parentNode.parentNode.nodeName === 'A')) ?
-        NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+      const acceptNode = x => this._acceptNodeInTextNodeWalker(x);
       const treeWalker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, {acceptNode}, false);
       let t;
 
@@ -313,8 +319,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     _processNodeJira(node) {
       const processedNodes = new Set();
 
-      const acceptNode = t => ((t.parentNode.nodeName === 'A') || (t.parentNode.parentNode.nodeName === 'A')) ?
-        NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+      const acceptNode = x => this._acceptNodeInTextNodeWalker(x);
       const treeWalker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, {acceptNode}, false);
       let t;
 
