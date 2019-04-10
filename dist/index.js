@@ -1,5 +1,5 @@
 javascript:/* eslint-disable-line no-unused-labels *//*
- * # NgSlackLinkifier v0.1.2
+ * # NgSlackLinkifier v0.1.3
  *
  * ## What it does
  *
@@ -7,17 +7,33 @@ javascript:/* eslint-disable-line no-unused-labels *//*
  *
  * - Markdown-like links (of the form `[some text](/some/url)`) to actual links.
  *
+ * - URLs to GitHub commits to short links. E.g.:
+ *   - `https://github.com/angular/angular/commit/a1b2c3d4e5` --> `angular@a1b2c3d4e5`
+ *   - `https://github.com/angular/angular-cli/commit/b2c3d4e5f6` --> `angular-cli@b2c3d4e5f6`
+ *   - `https://github.com/not-angular/some-lib/commit/c3d4e5f6g7` --> `not-angular/some-lib@c3d4e5f6g7`
+ *
+ * - GitHub commits of the format `[<owner>/]<repo>@<sha>` to links. If omitted `<owner>` defaults to `angular`. In
+ *   order for commits to be recognized at least the first 7 characters of the SHA must be provided. E.g.:
+ *   - `angular@a1b2c3d` or `angular/angular@a1b2c3d` -->
+ *     `[angular@a1b2c3d](https://github.com/angular/angular/commit/a1b2c3d)`
+ *   - `angular-cli@b2c3d4e5f6` or `angular/angular-cli@b2c3d4e5f6` -->
+ *     `[`angular-cli@b2c3d4e`](https://github.com/angular/angular-cli/commit/b2c3d4e5f6)`
+ *   - `not-angular/some-lib@c3d4e5f6` -->
+ *     `[not-angular/some-lib@c3d4e5f](https://github.com/not-angular/some-lib/commit/c3d4e5f6`
+ *
  * - URLs to GitHub issues/PRs to short links. E.g.:
  *   - `https://github.com/angular/angular/issues/12345` --> `#12345`
  *   - `https://github.com/angular/angular-cli/pull/23456` --> `angular-cli#23456`
- *   - `https://github.com/not-angular/some-lib/pull/34567` --> `not-angular/material2#34567`
+ *   - `https://github.com/not-angular/some-lib/pull/34567` --> `not-angular/some-lib@#34567`
  *
  * - GitHub issues/PRs of the format `[[<owner>/]<repo>]#<issue-or-pr>` to links. If omitted `<owner>` and `<repo>`
  *   default to `angular`. E.g.:
  *   - `#12345` or `angular#12345` or `angular/angular#12345` -->
  *     `[#12345](https://github.com/angular/angular/issues/12345)`
- *   - `angular-cli#23456` --> link to `https://github.com/angular/angular-cli/issues/23456`
- *   - `not-angular/some-lib#12345` --> link to `https://github.com/not-angular/some-lib/issues/34567`
+ *   - `angular-cli#23456` or `angular/angular-cli#23456` -->
+ *     `[angular-cli#23456](https://github.com/angular/angular-cli/issues/23456)`
+ *   - `not-angular/some-lib#34567` -->
+ *     [not-angular/some-lib#34567](https://github.com/not-angular/some-lib/issues/34567)`
  *
  * - URLs to Jira-like issues for `angular-team` to short links. (Recognizes the format `XYZ-<number>`.) E.g.:
  *   - `https://angular-team.atlassian.net/browse/FW-12345` --> `FW-12345`
@@ -42,16 +58,19 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   /* Constants */
   const NAME = 'NgSlackLinkifier';
-  const VERSION = '0.1.2';
+  const VERSION = '0.1.3';
 
-  const CLASS_GITHUB_LINK = 'nsl-github';
+  const CLASS_GITHUB_COMMIT_LINK = 'nsl-github-commit';
+  const CLASS_GITHUB_ISSUE_LINK = 'nsl-github-issue';
   const CLASS_JIRA_LINK = 'nsl-jira';
   const CLASS_PROCESSED = 'nsl-processed';
   const CLASS_POST_PROCESSED = 'nsl-post-processed';
 
-  /* Break up so that they are not auto-decoded when used as bookmarklet. */
-  const S = '%' + '3A';
-  const I = '%' + '2F';
+  /*
+   * Encoded entities need to be broken up, so that they are not auto-decoded, when the script is used as a bookmarklet.
+   * (NOTE: The used method for breaking up those entities should survive minification.)
+   */
+  const P = '%';
 
   /* Classes */
   class Deferred {
@@ -75,24 +94,59 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       this._cache.clear();
     }
 
-    getIssueInfo(owner, repo, issue) {
-      const url = `https://api.github.com/repos/${owner}/${repo}/issues/${issue}`;
+    getCommitInfo(owner, repo, commit) {
+      const url = `https://api.github.com/repos/${owner}/${repo}/commits/${commit}`;
       return this._getJson(url).
         then(data => ({
-          number: issue,
+          sha: data.sha,
+          message: data.commit.message,
+          author: this._extractUserInfo(data.author),
+          committer: this._extractUserInfo(data.committer),
+          authorDate: new Date(data.commit.author.date),
+          committerDate: new Date(data.commit.committer.date),
+          stats: data.stats,
+          files: data.files.map(f => this._extractFileInfo(f)),
+        })).
+        catch(err => {
+          throw new Error(`Error getting GitHub info for ${owner}/${repo}@${commit}:\n${err.message || err}`);
+        });
+    }
+
+    getIssueInfo(owner, repo, number) {
+      const url = `https://api.github.com/repos/${owner}/${repo}/issues/${number}`;
+      return this._getJson(url).
+        then(data => ({
+          number: data.number,
           title: data.title,
           description: data.body.trim(),
-          author: {
-            avatar: data.user.avatar_url,
-            username: data.user.login,
-            url: data.user.html_url,
-          },
+          author: this._extractUserInfo(data.user),
           state: data.state,
           labels: data.labels.map(l => l.name),
         })).
         catch(err => {
-          throw new Error(`Error getting GitHub info for ${owner}/${repo}#${issue}:\n${err.message || err}`);
+          throw new Error(`Error getting GitHub info for ${owner}/${repo}#${number}:\n${err.message || err}`);
         });
+    }
+
+    _extractFileInfo(file) {
+      return {
+        filename: file.filename,
+        patch: file.patch,
+        status: file.status,
+        stats: {
+          total: file.changes,
+          additions: file.additions,
+          deletions: file.deletions,
+        },
+      };
+    }
+
+    _extractUserInfo(user) {
+      return {
+        avatar: user.avatar_url,
+        username: user.login,
+        url: user.html_url,
+      };
     }
 
     async _getErrorForResponse(res) {
@@ -217,7 +271,9 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       nodes.forEach(n => {
         if (processedParents.has(n.parentNode)) return;
 
-        const isAncestorOfInterest = n.closest ? n.closest(selectors) : n.parentNode.closest(selectors);
+        const isAncestorOfInterest = n.closest ?
+          n.closest(selectors) :
+          (n.parentNode && n.parentNode.closest(selectors));
 
         if (isAncestorOfInterest) {
           /* A child of a message body element was added. */
@@ -229,10 +285,18 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       });
     }
 
+    _acceptNodeInTextNodeWalker(node) {
+      return (node.parentNode &&
+          (node.parentNode.nodeName !== 'A') &&
+          (!node.parentNode.parentNode || (node.parentNode.parentNode.nodeName !== 'A'))) ?
+        NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+    }
+
     _processNode(node, forcePostProcess) {
       const processedNodes = new Set([
         ...this._processNodeMdLinks(node),
-        ...this._processNodeGithub(node),
+        ...this._processNodeGithubCommits(node),
+        ...this._processNodeGithubIssues(node),
         ...this._processNodeJira(node),
       ]);
 
@@ -240,12 +304,72 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       if (forcePostProcess || processedNodes.size) this._postProcessNode(node);
     }
 
-    /* Process GitHub-like issues/PRs. */
-    _processNodeGithub(node) {
+    /* Process GitHub-like commits. */
+    _processNodeGithubCommits(node) {
       const processedNodes = new Set();
 
-      const acceptNode = t => ((t.parentNode.nodeName === 'A') || (t.parentNode.parentNode.nodeName === 'A')) ?
-        NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+      const acceptNode = x => this._acceptNodeInTextNodeWalker(x);
+      const treeWalker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, {acceptNode}, false);
+      let t;
+
+      while ((t = treeWalker.nextNode())) {
+        const textMatch = /(?:([\w-]+)\/)?([\w-]+)@([A-Fa-f\d]{7,})\b/.exec(t.textContent);
+
+        if (textMatch) {
+          const [, owner = 'angular', repo = 'angular', commit] = textMatch;
+          const url = `https://github.com/${owner}/${repo}/commit/${commit}`;
+          const link = Object.assign(document.createElement('a'), {
+            href: url,
+            target: '_blank',
+            textContent: url,
+          });
+
+          const trailingText = document.createTextNode(t.textContent.slice(textMatch.index + textMatch[0].length));
+
+          t.textContent = t.textContent.slice(0, textMatch.index);
+          t.after(link);
+          link.after(trailingText);
+
+          processedNodes.add(link);
+        }
+      }
+
+      node.querySelectorAll(`a:not(.${CLASS_PROCESSED})`).forEach(link => {
+        const hrefMatch = /^https:\/\/github\.com\/([\w-]+)\/([\w-]+)\/commit\/([A-Fa-f\d]{7,})$/.exec(link.href) ||
+          /* eslint-disable-next-line max-len */
+          new RegExp(`^https://slack-redir\\.net/link\\?url=https${P}3A${P}2F${P}2Fgithub\\.com${P}2F([\\w-]+)${P}2F([\\w-]+)${P}2Fcommit${P}2F([A-Fa-f\\d]{7,})$`).exec(link.href);
+
+        if (hrefMatch) {
+          const [, owner, repo, commit] = hrefMatch;
+
+          link.classList.add(CLASS_GITHUB_COMMIT_LINK);
+          link.dataset.nslOwner = owner;
+          link.dataset.nslRepo = repo;
+          link.dataset.nslCommit = commit;
+
+          processedNodes.add(link);
+        }
+
+        const htmlMatch = /^https:\/\/github\.com\/([\w-]+)\/([\w-]+)\/commit\/([A-Fa-f\d]{7,})$/.exec(link.innerHTML);
+
+        if (htmlMatch) {
+          const [, owner, repo, commit] = htmlMatch;
+          const repoSlug = `${(owner === 'angular') ? '' : `${owner}/`}${repo}`;
+
+          link.innerHTML = `<b>${repoSlug}@${commit.slice(0, 7)}</b>`;
+
+          processedNodes.add(link);
+        }
+      });
+
+      return processedNodes;
+    }
+
+    /* Process GitHub-like issues/PRs. */
+    _processNodeGithubIssues(node) {
+      const processedNodes = new Set();
+
+      const acceptNode = x => this._acceptNodeInTextNodeWalker(x);
       const treeWalker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, {acceptNode}, false);
       let t;
 
@@ -274,12 +398,12 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       node.querySelectorAll(`a:not(.${CLASS_PROCESSED})`).forEach(link => {
         const hrefMatch = /^https:\/\/github\.com\/([\w-]+)\/([\w-]+)\/(?:issues|pull)\/(\d+)$/.exec(link.href) ||
           /* eslint-disable-next-line max-len */
-          new RegExp(`^https://slack-redir\\.net/link\\?url=https${S}${I}${I}github\\.com${I}([\\w-]+)${I}([\\w-]+)${I}(?:issues|pull)${I}(\\d+)$`).exec(link.href);
+          new RegExp(`^https://slack-redir\\.net/link\\?url=https${P}3A${P}2F${P}2Fgithub\\.com${P}2F([\\w-]+)${P}2F([\\w-]+)${P}2F(?:issues|pull)${P}2F(\\d+)$`).exec(link.href);
 
         if (hrefMatch) {
           const [, owner, repo, issue] = hrefMatch;
 
-          link.classList.add(CLASS_GITHUB_LINK);
+          link.classList.add(CLASS_GITHUB_ISSUE_LINK);
           link.dataset.nslOwner = owner;
           link.dataset.nslRepo = repo;
           link.dataset.nslNumber = issue;
@@ -309,8 +433,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     _processNodeJira(node) {
       const processedNodes = new Set();
 
-      const acceptNode = t => ((t.parentNode.nodeName === 'A') || (t.parentNode.parentNode.nodeName === 'A')) ?
-        NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+      const acceptNode = x => this._acceptNodeInTextNodeWalker(x);
       const treeWalker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, {acceptNode}, false);
       let t;
 
@@ -338,7 +461,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       node.querySelectorAll(`a:not(.${CLASS_PROCESSED})`).forEach(link => {
         const hrefMatch = /^https:\/\/angular-team\.atlassian\.net\/browse\/([A-Z]+-\d+)$/.exec(link.href) ||
           /* eslint-disable-next-line max-len */
-          new RegExp(`^https://slack-redir\\.net/link\\?url=https${S}${I}${I}angular-team\\.atlassian\\.net${I}browse${I}([A-Z]+-\\d+)$`).exec(link.href);
+          new RegExp(`^https://slack-redir\\.net/link\\?url=https${P}3A${P}2F${P}2Fangular-team\\.atlassian\\.net${P}2Fbrowse${P}2F([A-Z]+-\\d+)$`).exec(link.href);
 
         if (hrefMatch) {
           link.classList.add(CLASS_JIRA_LINK);
@@ -461,106 +584,197 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     _addListeners(node) {
-      const colorPerState = {closed: 'red', draft: 'gray', merged: 'darkorchid', open: 'green'};
       const processedNodes = new Set();
 
-      node.querySelectorAll(`.${CLASS_GITHUB_LINK}:not(.${CLASS_POST_PROCESSED})`).forEach(link => {
+      node.querySelectorAll(`.${CLASS_GITHUB_COMMIT_LINK}:not(.${CLASS_POST_PROCESSED})`).forEach(link => {
         processedNodes.add(link);
+        this._addListenersForLink(link, data => this._getPopupContentForGithubCommit(data));
+      });
 
-        const linkStyle = link.style;
-        const linkData = link.dataset;
-
-        const owner = linkData.nslOwner;
-        const repo = linkData.nslRepo;
-        const number = linkData.nslNumber;
-
-        let interactionId = 0;
-
-        const onMouseenter = async evt => {
-          try {
-            const id = interactionId;
-
-            linkStyle.cursor = 'help';
-
-            await new Promise(resolve => setTimeout(resolve, 500));
-            if (id !== interactionId) return;  /* Abort if already "mouseleft". */
-
-            linkStyle.cursor = 'progress';
-
-            const info = await this._ghUtils.getIssueInfo(owner, repo, number);
-            if (id !== interactionId) return;  /* Abort if already "mouseleft". */
-
-            const description = info.description.replace(/^<!--[^]*?-->\s*/, '');
-            const html = `
-              <p style="display: flex; font-size: 0.75em; justify-content: space-between;">
-                <span>
-                  <img src="${info.author.avatar}" width="25" height="25" style="border-radius: 6px;" />
-                  <a href="${info.author.url}" target="_blank">@${info.author.username}</a>
-                </span>
-                <span style="text-align: right;">
-                  ${info.labels.sort().map(l => `
-                    <small style="
-                          border: 1px solid;
-                          border-radius: 6px;
-                          line-height: 2.5em;
-                          margin: 0 3px;
-                          padding: 2px 4px;
-                          text-align: center;
-                          white-space: nowrap;
-                        ">${l}</small>
-                  `).join('\n')}
-                </span>
-              </p>
-              <p style="align-items: flex-start; display: flex; font-size: 1.25em;">
-                <span style="
-                      background-color: ${colorPerState[info.state]};
-                      border-radius: 6px;
-                      color: white;
-                      font-size: 0.75em;
-                      justify-content: center;
-                      margin-right: 5px;
-                      padding: 2px 4px;
-                      text-align: center;
-                    ">
-                  ${info.state.toUpperCase()}
-                </span>
-                <b>${info.title}</b>
-                <span style="color: gray;">#${info.number}</span>
-              </p>
-              <br />
-              <pre>${description}</pre>
-            `;
-
-            this._uiUtils.showPopup(html, evt);
-          } catch (err) {
-            this._onError(err);
-          }
-        };
-
-        const onMouseleave = () => {
-          ++interactionId;
-          linkStyle.cursor = '';
-          this._uiUtils.scheduleHidePopup(500);
-        };
-
-        link.addEventListener('mouseenter', onMouseenter);
-        link.addEventListener('mouseleave', onMouseleave);
-
-        this._cleanUpFns.push(
-          () => link.removeEventListener('mouseenter', onMouseenter),
-          () => link.removeEventListener('mouseleave', onMouseleave));
+      node.querySelectorAll(`.${CLASS_GITHUB_ISSUE_LINK}:not(.${CLASS_POST_PROCESSED})`).forEach(link => {
+        processedNodes.add(link);
+        this._addListenersForLink(link, data => this._getPopupContentForGithubIssue(data));
       });
 
       node.querySelectorAll(`.${CLASS_JIRA_LINK}:not(.${CLASS_POST_PROCESSED})`).forEach(link => {
         processedNodes.add(link);
-
-        /* TODO(gkalpak): Implement popup for Jira issues. */
+        this._addListenersForLink(link, data => this._getPopupContentForJira(data));
       });
 
       processedNodes.forEach(n => {
         n.classList.add(CLASS_POST_PROCESSED);
         this._cleanUpFns.push(() => n.classList.remove(CLASS_POST_PROCESSED));
       });
+    }
+
+    _addListenersForLink(link, getPopupContent) {
+      const linkStyle = link.style;
+      const linkData = link.dataset;
+      const cursorStyle = 'help';
+      let interactionId = 0;
+
+      const onMouseenter = async evt => {
+        try {
+          const id = interactionId;
+
+          await new Promise(resolve => setTimeout(resolve, 500));
+          if (id !== interactionId) return;  /* Abort if already "mouseleft". */
+
+          linkStyle.cursor = 'progress';
+
+          const html = await getPopupContent(linkData);
+          if (id !== interactionId) return;  /* Abort if already "mouseleft". */
+
+          linkStyle.cursor = cursorStyle;
+
+          this._uiUtils.showPopup(html, evt);
+        } catch (err) {
+          this._onError(err);
+        }
+      };
+
+      const onMouseleave = () => {
+        ++interactionId;
+        linkStyle.cursor = cursorStyle;
+        this._uiUtils.scheduleHidePopup(500);
+      };
+
+      linkStyle.cursor = cursorStyle;
+      link.addEventListener('mouseenter', onMouseenter);
+      link.addEventListener('mouseleave', onMouseleave);
+
+      this._cleanUpFns.push(
+        () => link.removeEventListener('mouseenter', onMouseenter),
+        () => link.removeEventListener('mouseleave', onMouseleave));
+    }
+
+    async _getPopupContentForGithubCommit(data) {
+      const colorPerStatus = {added: 'green', modified: 'darkorchid', removed: 'red', renamed: 'blue'};
+
+      const owner = data.nslOwner;
+      const repo = data.nslRepo;
+      const commit = data.nslCommit;
+
+      const info = await this._ghUtils.getCommitInfo(owner, repo, commit);
+      const subject = info.message.split('\n', 1).pop();
+      const body = info.message.slice(subject.length).trim();
+
+      const fileHtml = file => `
+        <div
+            style="align-items: baseline; cursor: help; display: flex; margin: 0 15px 10px;"
+            title="${file.patch.replace(/"/g, '&quot;').replace(/\n/g, '\u000A')}">
+          <small style="
+                background-color: ${colorPerStatus[file.status]};
+                border-radius: 6px;
+                color: white;
+                font-size: 0.75em;
+                line-height: 1em;
+                margin-right: 5px;
+                min-width: 55px;
+                opacity: 0.5;
+                padding: 2px 4px;
+                text-align: center;
+              ">
+            ${file.status}
+          </small>
+          <span style="flex: auto; white-space: nowrap;">
+            ${file.filename}
+          </span>
+          <small style="text-align: right; white-space: nowrap;">
+            <span style="color: ${colorPerStatus.added}; display: inline-block; min-width: 33px;">
+              +${file.stats.additions}
+            </span>
+            <span style="color: ${colorPerStatus.removed}; display: inline-block; min-width: 33px;">
+              -${file.stats.deletions}
+            </span>
+          </small>
+        </div>
+      `;
+
+      return `
+        <p style="display: flex; font-size: 0.9em; justify-content: space-between;">
+          <span>
+            <img src="${info.author.avatar}" width="25" height="25" style="border-radius: 6px;" />
+            <a href="${info.author.url}" target="_blank">@${info.author.username}</a>
+          </span>
+          <small style="color: gray; text-align: right;">
+            Committed on: ${info.committerDate.toLocaleString()}
+          </small>
+        </p>
+        <p style="align-items: flex-start; display: flex; font-size: 1.25em;">
+          <b>${subject}</b>
+          <span style="color: gray; margin-left: 5px;">@${info.sha.slice(0, 7)}</span>
+        </p>
+        ${body && `<br /><pre>${body}</pre>`}
+        <hr />
+        <p>
+          <b>Files (${info.files.length}):</b>
+          <div style="overflow: auto;">
+            <div style="display: flex; flex-direction: column; width: fit-content;">
+              ${info.files.map(fileHtml).join('')}
+            </div>
+          </div>
+        </p>
+      `;
+    }
+
+    async _getPopupContentForGithubIssue(data) {
+      const colorPerState = {closed: 'red', draft: 'gray', merged: 'darkorchid', open: 'green'};
+
+      const owner = data.nslOwner;
+      const repo = data.nslRepo;
+      const number = data.nslNumber;
+
+      const info = await this._ghUtils.getIssueInfo(owner, repo, number);
+      const description = info.description.replace(/^<!--[^]*?-->\s*/, '');
+
+      return `
+        <p style="display: flex; font-size: 0.9em; justify-content: space-between;">
+          <span>
+            <img src="${info.author.avatar}" width="25" height="25" style="border-radius: 6px;" />
+            <a href="${info.author.url}" target="_blank">@${info.author.username}</a>
+          </span>
+          <span style="text-align: right;">
+            ${info.labels.sort().map(l => `
+              <small style="
+                    border: 1px solid;
+                    border-radius: 6px;
+                    line-height: 2.5em;
+                    margin: 0 3px;
+                    padding: 2px 4px;
+                    text-align: center;
+                    white-space: nowrap;
+                  ">${l}</small>
+            `).join('\n')}
+          </span>
+        </p>
+        <p style="align-items: flex-start; display: flex; font-size: 1.25em;">
+          <span style="
+                background-color: ${colorPerState[info.state]};
+                border-radius: 6px;
+                color: white;
+                font-size: 0.75em;
+                margin-right: 5px;
+                padding: 2px 4px;
+                text-align: center;
+              ">
+            ${info.state.toUpperCase()}
+          </span>
+          <b>${info.title}</b>
+          <span style="color: gray; margin-left: 5px;">#${info.number}</span>
+        </p>
+        <br />
+        <pre>${description}</pre>
+      `;
+    }
+
+    async _getPopupContentForJira(data) {
+      /* TODO(gkalpak): Implement popup for Jira issues. */
+      return `
+        <div style="color: orange; font-size: 1.25em; text-align: center;">
+          [${data.nslNumber}] Fetching info for Jira issues is not yet supported :(
+        </div>
+      `;
     }
 
     async _getToken(storageKey, name, description) {
@@ -954,7 +1168,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       this._cancelShowPopup();
       this.hidePopup();
 
-      const position = this._calculatePopupPosition(evt);
+      const positioning = this._calculatePopupPositioning(evt);
       const onMouseenter = () => this._cancelHidePopup();
       const onMouseleave = () => this.hidePopup();
 
@@ -965,16 +1179,17 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         onmouseleave: onMouseleave,
         style: `
           background-color: white;
-          border: 1px solid lightgray;
+          border: 1px solid gray;
           border-radius: 6px;
-          bottom: ${position.bottom}px;
+          bottom: ${positioning.bottom};
           box-shadow: 0 0 0 1px rgba(0, 0, 0, .08), 0 4px 12px 0 rgba(0, 0, 0, .12);
-          left: ${position.left}px;
+          left: ${positioning.left};
+          max-height: ${positioning.maxHeight};
           overflow: auto;
           padding: 10px;
           position: fixed;
-          right: ${position.right}px;
-          top: ${position.top}px;
+          right: ${positioning.right};
+          top: ${positioning.top};
           user-select: text;
           z-index: 9999;
         `,
@@ -1047,54 +1262,36 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       ]).then(() => new Promise(resolve => setTimeout(resolve, duration)));
     }
 
-    _calculatePopupPosition(evt) {
-      const idealHeight = 500;
-      const idealWidth = 750;
+    _calculatePopupPositioning(evt) {
+      const idealWidth = 900;
+      const minIdealHeight = 500;
+      const maxIdealHeight = 750;
+      const margin = 10;
 
       const targetRect = evt.target.getBoundingClientRect();
 
       const topDistance = targetRect.top;
       const bottomDistance = window.innerHeight - targetRect.bottom;
-      const placement =
-        ((bottomDistance <= idealHeight) && ((topDistance > idealHeight) || (topDistance > bottomDistance))) ?
-          'top' :
-          'bottom';
+      const placeAbove =
+        (bottomDistance <= minIdealHeight) && ((topDistance > minIdealHeight) || (topDistance > bottomDistance));
 
       const calculateLeftRight = () => {
         const mid = (targetRect.left + targetRect.right) / 2;
         const halfWidth = idealWidth / 2;
 
-        let left = Math.max(5, mid - halfWidth);
-        let right = Math.min(window.innerWidth - 5, left + idealWidth);
+        let left = Math.max(margin, mid - halfWidth);
+        let right = Math.min(window.innerWidth - margin, left + idealWidth);
 
-        if (right - left < idealWidth) left = Math.max(5, right - idealWidth);
+        if (right - left < idealWidth) left = Math.max(margin, right - idealWidth);
 
-        return {left, right};
+        return {left: `${left}px`, right: `${window.innerWidth - right}px`};
       };
 
-      let rect;
-      switch (placement) {
-        case 'top':
-          rect = {
-            top: Math.max(5, targetRect.top - idealHeight),
-            bottom: targetRect.top,
-            ...calculateLeftRight(),
-          };
-          break;
-        case 'bottom':
-          rect = {
-            top: targetRect.bottom,
-            bottom: Math.min(window.innerHeight - 5, targetRect.bottom + idealHeight),
-            ...calculateLeftRight(),
-          };
-          break;
-      }
-
       return {
-        top: rect.top,
-        bottom: window.innerHeight - rect.bottom,
-        left: rect.left,
-        right: window.innerWidth - rect.right,
+        maxHeight: `${Math.min(maxIdealHeight, (placeAbove ? topDistance : bottomDistance) - margin)}px`,
+        top: placeAbove ? 'auto' : `${targetRect.bottom}px`,
+        bottom: placeAbove ? `${window.innerHeight - targetRect.top}px` : 'auto',
+        ...calculateLeftRight(),
       };
     }
 
