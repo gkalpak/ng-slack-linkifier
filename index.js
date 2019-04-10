@@ -991,7 +991,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         onmouseleave: onMouseleave,
         style: `
           background-color: white;
-          border: 1px solid lightgray;
+          border: 1px solid gray;
           border-radius: 6px;
           bottom: ${positioning.bottom};
           box-shadow: 0 0 0 1px rgba(0, 0, 0, .08), 0 4px 12px 0 rgba(0, 0, 0, .12);
@@ -1075,16 +1075,17 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     _calculatePopupPositioning(evt) {
-      const idealHeight = 500;
-      const idealWidth = 750;
-      const margin = 5;
+      const idealWidth = 900;
+      const minIdealHeight = 500;
+      const maxIdealHeight = 750;
+      const margin = 10;
 
       const targetRect = evt.target.getBoundingClientRect();
 
       const topDistance = targetRect.top;
       const bottomDistance = window.innerHeight - targetRect.bottom;
       const placeAbove =
-        (bottomDistance <= idealHeight) && ((topDistance > idealHeight) || (topDistance > bottomDistance));
+        (bottomDistance <= minIdealHeight) && ((topDistance > minIdealHeight) || (topDistance > bottomDistance));
 
       const calculateLeftRight = () => {
         const mid = (targetRect.left + targetRect.right) / 2;
@@ -1099,7 +1100,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           };
 
       return {
-        maxHeight: `${Math.min(idealHeight, (placeAbove ? topDistance : bottomDistance) - margin)}px`,
+        maxHeight: `${Math.min(maxIdealHeight, (placeAbove ? topDistance : bottomDistance) - margin)}px`,
         top: placeAbove ? 'auto' : `${targetRect.bottom}px`,
         bottom: placeAbove ? `${window.innerHeight - targetRect.top}px` : 'auto',
         ...calculateLeftRight(),
