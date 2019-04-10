@@ -470,19 +470,27 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     _addListeners(node) {
-      const colorPerState = {closed: 'red', draft: 'gray', merged: 'darkorchid', open: 'green'};
       const processedNodes = new Set();
 
       node.querySelectorAll(`.${CLASS_GITHUB_LINK}:not(.${CLASS_POST_PROCESSED})`).forEach(link => {
         processedNodes.add(link);
+        this._addListenersForLink(link, data => this._getPopupContentForGithubIssue(data));
+      });
 
+      node.querySelectorAll(`.${CLASS_JIRA_LINK}:not(.${CLASS_POST_PROCESSED})`).forEach(link => {
+        processedNodes.add(link);
+        this._addListenersForLink(link, data => this._getPopupContentForJira(data));
+      });
+
+      processedNodes.forEach(n => {
+        n.classList.add(CLASS_POST_PROCESSED);
+        this._cleanUpFns.push(() => n.classList.remove(CLASS_POST_PROCESSED));
+      });
+    }
+
+    _addListenersForLink(link, getPopupContent) {
         const linkStyle = link.style;
         const linkData = link.dataset;
-
-        const owner = linkData.nslOwner;
-        const repo = linkData.nslRepo;
-        const number = linkData.nslNumber;
-
         const cursorStyle = 'help';
         let interactionId = 0;
 
@@ -495,13 +503,43 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
             linkStyle.cursor = 'progress';
 
-            const info = await this._ghUtils.getIssueInfo(owner, repo, number);
+          const html = await getPopupContent(linkData);
             if (id !== interactionId) return;  /* Abort if already "mouseleft". */
 
             linkStyle.cursor = cursorStyle;
 
+          this._uiUtils.showPopup(html, evt);
+        } catch (err) {
+          this._onError(err);
+        }
+      };
+
+      const onMouseleave = () => {
+        ++interactionId;
+        linkStyle.cursor = cursorStyle;
+        this._uiUtils.scheduleHidePopup(500);
+      };
+
+      linkStyle.cursor = cursorStyle;
+      link.addEventListener('mouseenter', onMouseenter);
+      link.addEventListener('mouseleave', onMouseleave);
+
+      this._cleanUpFns.push(
+        () => link.removeEventListener('mouseenter', onMouseenter),
+        () => link.removeEventListener('mouseleave', onMouseleave));
+    }
+
+    async _getPopupContentForGithubIssue(data) {
+      const colorPerState = {closed: 'red', draft: 'gray', merged: 'darkorchid', open: 'green'};
+
+      const owner = data.nslOwner;
+      const repo = data.nslRepo;
+      const number = data.nslNumber;
+
+      const info = await this._ghUtils.getIssueInfo(owner, repo, number);
             const description = info.description.replace(/^<!--[^]*?-->\s*/, '');
-            const html = `
+
+      return `
               <p style="display: flex; font-size: 0.75em; justify-content: space-between;">
                 <span>
                   <img src="${info.author.avatar}" width="25" height="25" style="border-radius: 6px;" />
@@ -535,43 +573,20 @@ javascript:/* eslint-disable-line no-unused-labels *//*
                   ${info.state.toUpperCase()}
                 </span>
                 <b>${info.title}</b>
-                <span style="color: gray;">#${info.number}</span>
+          <span style="color: gray; margin-left: 5px;">#${info.number}</span>
               </p>
               <br />
               <pre>${description}</pre>
             `;
-
-            this._uiUtils.showPopup(html, evt);
-          } catch (err) {
-            this._onError(err);
           }
-        };
 
-        const onMouseleave = () => {
-          ++interactionId;
-          linkStyle.cursor = cursorStyle;
-          this._uiUtils.scheduleHidePopup(500);
-        };
-
-        linkStyle.cursor = cursorStyle;
-        link.addEventListener('mouseenter', onMouseenter);
-        link.addEventListener('mouseleave', onMouseleave);
-
-        this._cleanUpFns.push(
-          () => link.removeEventListener('mouseenter', onMouseenter),
-          () => link.removeEventListener('mouseleave', onMouseleave));
-      });
-
-      node.querySelectorAll(`.${CLASS_JIRA_LINK}:not(.${CLASS_POST_PROCESSED})`).forEach(link => {
-        processedNodes.add(link);
-
+    async _getPopupContentForJira(data) {
         /* TODO(gkalpak): Implement popup for Jira issues. */
-      });
-
-      processedNodes.forEach(n => {
-        n.classList.add(CLASS_POST_PROCESSED);
-        this._cleanUpFns.push(() => n.classList.remove(CLASS_POST_PROCESSED));
-      });
+      return `
+        <div style="color: orange; font-size: 1.25em; text-align: center;">
+          [${data.nslNumber}] Fetching info for Jira issues is not yet supported :(
+        </div>
+      `;
     }
 
     async _getToken(storageKey, name, description) {
