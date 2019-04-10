@@ -478,13 +478,12 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         const repo = linkData.nslRepo;
         const number = linkData.nslNumber;
 
+        const cursorStyle = 'help';
         let interactionId = 0;
 
         const onMouseenter = async evt => {
           try {
             const id = interactionId;
-
-            linkStyle.cursor = 'help';
 
             await new Promise(resolve => setTimeout(resolve, 500));
             if (id !== interactionId) return;  /* Abort if already "mouseleft". */
@@ -493,6 +492,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
             const info = await this._ghUtils.getIssueInfo(owner, repo, number);
             if (id !== interactionId) return;  /* Abort if already "mouseleft". */
+
+            linkStyle.cursor = cursorStyle;
 
             const description = info.description.replace(/^<!--[^]*?-->\s*/, '');
             const html = `
@@ -543,10 +544,11 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
         const onMouseleave = () => {
           ++interactionId;
-          linkStyle.cursor = '';
+          linkStyle.cursor = cursorStyle;
           this._uiUtils.scheduleHidePopup(500);
         };
 
+        linkStyle.cursor = cursorStyle;
         link.addEventListener('mouseenter', onMouseenter);
         link.addEventListener('mouseleave', onMouseleave);
 
