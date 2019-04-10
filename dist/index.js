@@ -1,5 +1,5 @@
 javascript:/* eslint-disable-line no-unused-labels *//*
- * # NgSlackLinkifier v0.1.3
+ * # NgSlackLinkifier v0.1.4
  *
  * ## What it does
  *
@@ -58,7 +58,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   /* Constants */
   const NAME = 'NgSlackLinkifier';
-  const VERSION = '0.1.3';
+  const VERSION = '0.1.4';
 
   const CLASS_GITHUB_COMMIT_LINK = 'nsl-github-commit';
   const CLASS_GITHUB_ISSUE_LINK = 'nsl-github-issue';
@@ -122,6 +122,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           author: this._extractUserInfo(data.user),
           state: data.state,
           labels: data.labels.map(l => l.name),
+          isPr: data.html_url.endsWith(`/pull/${data.number}`),
         })).
         catch(err => {
           throw new Error(`Error getting GitHub info for ${owner}/${repo}#${number}:\n${err.message || err}`);
@@ -659,37 +660,55 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       const subject = info.message.split('\n', 1).pop();
       const body = info.message.slice(subject.length).trim();
 
-      const fileHtml = file => `
-        <div
-            style="align-items: baseline; cursor: help; display: flex; margin: 0 15px 10px;"
-            title="${file.patch.replace(/"/g, '&quot;').replace(/\n/g, '\u000A')}">
-          <small style="
-                background-color: ${colorPerStatus[file.status]};
-                border-radius: 6px;
-                color: white;
-                font-size: 0.75em;
-                line-height: 1em;
-                margin-right: 5px;
-                min-width: 55px;
-                opacity: 0.5;
-                padding: 2px 4px;
-                text-align: center;
-              ">
-            ${file.status}
-          </small>
-          <span style="flex: auto; white-space: nowrap;">
-            ${file.filename}
-          </span>
-          <small style="text-align: right; white-space: nowrap;">
-            <span style="color: ${colorPerStatus.added}; display: inline-block; min-width: 33px;">
-              +${file.stats.additions}
-            </span>
-            <span style="color: ${colorPerStatus.removed}; display: inline-block; min-width: 33px;">
-              -${file.stats.deletions}
-            </span>
-          </small>
-        </div>
-      `;
+      const fileHtml = file => {
+        const tooltip = file.patch.replace(/"/g, '&quot;').replace(/\n/g, '\u000A');
+        const diff =   file.patch.
+          split('\n').
+          map(l => {
+            const style = l.startsWith('+') ?
+              'background-color: rgba(0, 255, 0, 0.11);' : l.startsWith('-') ?
+                'background-color: rgba(255, 0, 0, 0.11);' : l.startsWith('@@') ?
+                  'color: rgba(0, 0, 0, 0.33);' :
+                  'color: rgba(0, 0, 0, 0.66);';
+            return `<span style="${style}">${l}</span>`;
+          }).
+          join('\n');
+
+        return `
+          <details>
+            <summary
+                style="align-items: baseline; cursor: pointer; display: flex; margin: 0 15px 10px; outline: none;"
+                title="${tooltip}">
+              <small style="
+                    background-color: ${colorPerStatus[file.status]};
+                    border-radius: 6px;
+                    color: white;
+                    font-size: 0.75em;
+                    line-height: 1em;
+                    margin-right: 5px;
+                    min-width: 55px;
+                    opacity: 0.5;
+                    padding: 2px 4px;
+                    text-align: center;
+                  ">
+                ${file.status}
+              </small>
+              <span style="flex: auto; white-space: nowrap;">
+                ${file.filename}
+              </span>
+              <small style="text-align: right; white-space: nowrap;">
+                <span style="color: ${colorPerStatus.added}; display: inline-block; min-width: 33px;">
+                  +${file.stats.additions}
+                </span>
+                <span style="color: ${colorPerStatus.removed}; display: inline-block; min-width: 33px;">
+                  -${file.stats.deletions}
+                </span>
+              </small>
+            </summary>
+            <pre style="font-size: 0.9em; line-height: calc(0.9em + 5px);">${diff}</pre>
+          </details>
+        `;
+      };
 
       return `
         <p style="display: flex; font-size: 0.9em; justify-content: space-between;">
@@ -707,14 +726,17 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         </p>
         ${body && `<br /><pre>${body}</pre>`}
         <hr />
-        <p>
-          <b>Files (${info.files.length}):</b>
+        <div>
+          <p style="display: flex;">
+            <b style="flex: auto;">Files (${info.files.length}):</b>
+            <small style="color: lightgray;">Click on a file to see diff.</small>
+          </p>
           <div style="overflow: auto;">
             <div style="display: flex; flex-direction: column; width: fit-content;">
               ${info.files.map(fileHtml).join('')}
             </div>
           </div>
-        </p>
+        </div>
       `;
     }
 
@@ -760,11 +782,14 @@ javascript:/* eslint-disable-line no-unused-labels *//*
               ">
             ${info.state.toUpperCase()}
           </span>
-          <b>${info.title}</b>
-          <span style="color: gray; margin-left: 5px;">#${info.number}</span>
+          <b style="flex: auto;">${info.title}</b>
+          <span style="color: gray; margin-left: 5px; white-space: nowrap;">
+            <span style="color: lightgray;">${info.isPr ? 'PR' : 'Issue'}:</span>
+            #${info.number}
+          </span>
         </p>
         <br />
-        <pre>${description}</pre>
+        <pre>${description || '<i style="color: gray;">No description.</i>'}</pre>
       `;
     }
 
