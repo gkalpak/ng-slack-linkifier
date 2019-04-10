@@ -77,24 +77,59 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       this._cache.clear();
     }
 
-    getIssueInfo(owner, repo, issue) {
-      const url = `https://api.github.com/repos/${owner}/${repo}/issues/${issue}`;
+    getCommitInfo(owner, repo, commit) {
+      const url = `https://api.github.com/repos/${owner}/${repo}/commits/${commit}`;
       return this._getJson(url).
         then(data => ({
-          number: issue,
+          sha: data.sha,
+          message: data.commit.message,
+          author: this._extractUserInfo(data.author),
+          committer: this._extractUserInfo(data.committer),
+          authorDate: new Date(data.commit.author.date),
+          committerDate: new Date(data.commit.committer.date),
+          stats: data.stats,
+          files: data.files.map(f => this._extractFileInfo(f)),
+        })).
+        catch(err => {
+          throw new Error(`Error getting GitHub info for ${owner}/${repo}@${commit}:\n${err.message || err}`);
+        });
+    }
+
+    getIssueInfo(owner, repo, number) {
+      const url = `https://api.github.com/repos/${owner}/${repo}/issues/${number}`;
+      return this._getJson(url).
+        then(data => ({
+          number: data.number,
           title: data.title,
           description: data.body.trim(),
-          author: {
-            avatar: data.user.avatar_url,
-            username: data.user.login,
-            url: data.user.html_url,
-          },
+          author: this._extractUserInfo(data.user),
           state: data.state,
           labels: data.labels.map(l => l.name),
         })).
         catch(err => {
-          throw new Error(`Error getting GitHub info for ${owner}/${repo}#${issue}:\n${err.message || err}`);
+          throw new Error(`Error getting GitHub info for ${owner}/${repo}#${number}:\n${err.message || err}`);
         });
+    }
+
+    _extractFileInfo(file) {
+      return {
+        filename: file.filename,
+        patch: file.patch,
+        status: file.status,
+        stats: {
+          total: file.changes,
+          additions: file.additions,
+          deletions: file.deletions,
+        },
+      };
+    }
+
+    _extractUserInfo(user) {
+      return {
+        avatar: user.avatar_url,
+        username: user.login,
+        url: user.html_url,
+      };
     }
 
     async _getErrorForResponse(res) {
