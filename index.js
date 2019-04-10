@@ -659,37 +659,55 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       const subject = info.message.split('\n', 1).pop();
       const body = info.message.slice(subject.length).trim();
 
-      const fileHtml = file => `
-        <div
-            style="align-items: baseline; cursor: help; display: flex; margin: 0 15px 10px;"
-            title="${file.patch.replace(/"/g, '&quot;').replace(/\n/g, '\u000A')}">
-          <small style="
-                background-color: ${colorPerStatus[file.status]};
-                border-radius: 6px;
-                color: white;
-                font-size: 0.75em;
-                line-height: 1em;
-                margin-right: 5px;
-                min-width: 55px;
-                opacity: 0.5;
-                padding: 2px 4px;
-                text-align: center;
-              ">
-            ${file.status}
-          </small>
-          <span style="flex: auto; white-space: nowrap;">
-            ${file.filename}
-          </span>
-          <small style="text-align: right; white-space: nowrap;">
-            <span style="color: ${colorPerStatus.added}; display: inline-block; min-width: 33px;">
-              +${file.stats.additions}
-            </span>
-            <span style="color: ${colorPerStatus.removed}; display: inline-block; min-width: 33px;">
-              -${file.stats.deletions}
-            </span>
-          </small>
-        </div>
-      `;
+      const fileHtml = file => {
+        const tooltip = file.patch.replace(/"/g, '&quot;').replace(/\n/g, '\u000A');
+        const diff =   file.patch.
+          split('\n').
+          map(l => {
+            const style = l.startsWith('+') ?
+              'background-color: rgba(0, 255, 0, 0.11);' : l.startsWith('-') ?
+                'background-color: rgba(255, 0, 0, 0.11);' : l.startsWith('@@') ?
+                  'color: rgba(0, 0, 0, 0.33);' :
+                  'color: rgba(0, 0, 0, 0.66);';
+            return `<span style="${style}">${l}</span>`;
+          }).
+          join('\n');
+
+        return `
+          <details>
+            <summary
+                style="align-items: baseline; cursor: pointer; display: flex; margin: 0 15px 10px; outline: none;"
+                title="${tooltip}">
+              <small style="
+                    background-color: ${colorPerStatus[file.status]};
+                    border-radius: 6px;
+                    color: white;
+                    font-size: 0.75em;
+                    line-height: 1em;
+                    margin-right: 5px;
+                    min-width: 55px;
+                    opacity: 0.5;
+                    padding: 2px 4px;
+                    text-align: center;
+                  ">
+                ${file.status}
+              </small>
+              <span style="flex: auto; white-space: nowrap;">
+                ${file.filename}
+              </span>
+              <small style="text-align: right; white-space: nowrap;">
+                <span style="color: ${colorPerStatus.added}; display: inline-block; min-width: 33px;">
+                  +${file.stats.additions}
+                </span>
+                <span style="color: ${colorPerStatus.removed}; display: inline-block; min-width: 33px;">
+                  -${file.stats.deletions}
+                </span>
+              </small>
+            </summary>
+            <pre style="font-size: 0.9em; line-height: calc(0.9em + 5px);">${diff}</pre>
+          </details>
+        `;
+      };
 
       return `
         <p style="display: flex; font-size: 0.9em; justify-content: space-between;">
@@ -707,14 +725,17 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         </p>
         ${body && `<br /><pre>${body}</pre>`}
         <hr />
-        <p>
-          <b>Files (${info.files.length}):</b>
+        <div>
+          <p style="display: flex;">
+            <b style="flex: auto;">Files (${info.files.length}):</b>
+            <small style="color: lightgray;">Click on a file to see diff.</small>
+          </p>
           <div style="overflow: auto;">
             <div style="display: flex; flex-direction: column; width: fit-content;">
               ${info.files.map(fileHtml).join('')}
             </div>
           </div>
-        </p>
+        </div>
       `;
     }
 
