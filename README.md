@@ -13,14 +13,19 @@ A script to enhance messages, especially links, in the `angular-team` Slack. See
 
 ## Usage
 
-The code ([dist/index.js][index-dist]) should be run in the context of the [Slack web-app][slack]. For example, you can
-paste and run the code in DevTools or use it as a [bookmarklet].
+The script should be run in the context of the [Slack web-app][slack]. For example, you can paste and and run the code
+in DevTools or use it as a [bookmarklet].
 
 If you are using the desktop app for Slack, you need to [start the app in a special way][slack-app-dev] in order to be
 able to open DevTools.
 
 The latest release can be found [here][releases].<br />
-The code is also available at `https://cdn.jsdelivr.net/gh/gkalpak/ng-slack-linkifier@X.Y.Z/dist/index.js`.
+The code for each release is in the corresponding commit's [dist/][dist] directory.
+The code is also available at `https://cdn.jsdelivr.net/gh/gkalpak/ng-slack-linkifier@X.Y.Z/dist/index[.min].js`.
+
+> WARNING:
+> The code in [dist/][dist] is only updated on releases; it does not reflect the code in [index.js][index] on every
+> commit (and may even be invalid on non-release commits).
 
 
 ## Test
@@ -72,15 +77,14 @@ Things I want to (but won't necessarily) do:
 - Add tests.
 - Add CI support.
 - Consider switching to TypeScript. (How does it affect bundle size? Is it worth it?)
-- Publish minified version.
 - Break up into multiple files.
 
 - Convert to a Chrome Extension(?).
 
 
 [bookmarklet]: https://en.wikipedia.org/wiki/Bookmarklet
+[dist]: ./dist
 [index]: ./index.js
-[index-dist]: ./dist/index.js
 [releases]: https://github.com/gkalpak/ng-slack-linkifier/releases
 [slack]: https://slack.com/
 [slack-app-dev]: https://www.reddit.com/r/Slack/comments/955dro/how_do_i_open_the_chromium_developer_tools_in_the

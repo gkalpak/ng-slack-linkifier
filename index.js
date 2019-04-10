@@ -49,9 +49,11 @@ javascript:/* eslint-disable-line no-unused-labels *//*
   const CLASS_PROCESSED = 'nsl-processed';
   const CLASS_POST_PROCESSED = 'nsl-post-processed';
 
-  /* Break up so that they are not auto-decoded when used as bookmarklet. */
-  const S = '%' + '3A';
-  const I = '%' + '2F';
+  /*
+   * Encoded entities need to be broken up, so that they are not auto-decoded, when the script is used as a bookmarklet.
+   * (NOTE: The used method for breaking up those entities should survive minification.)
+   */
+  const P = '%';
 
   /* Classes */
   class Deferred {
@@ -276,7 +278,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       node.querySelectorAll(`a:not(.${CLASS_PROCESSED})`).forEach(link => {
         const hrefMatch = /^https:\/\/github\.com\/([\w-]+)\/([\w-]+)\/(?:issues|pull)\/(\d+)$/.exec(link.href) ||
           /* eslint-disable-next-line max-len */
-          new RegExp(`^https://slack-redir\\.net/link\\?url=https${S}${I}${I}github\\.com${I}([\\w-]+)${I}([\\w-]+)${I}(?:issues|pull)${I}(\\d+)$`).exec(link.href);
+          new RegExp(`^https://slack-redir\\.net/link\\?url=https${P}3A${P}2F${P}2Fgithub\\.com${P}2F([\\w-]+)${P}2F([\\w-]+)${P}2F(?:issues|pull)${P}2F(\\d+)$`).exec(link.href);
 
         if (hrefMatch) {
           const [, owner, repo, issue] = hrefMatch;
@@ -340,7 +342,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       node.querySelectorAll(`a:not(.${CLASS_PROCESSED})`).forEach(link => {
         const hrefMatch = /^https:\/\/angular-team\.atlassian\.net\/browse\/([A-Z]+-\d+)$/.exec(link.href) ||
           /* eslint-disable-next-line max-len */
-          new RegExp(`^https://slack-redir\\.net/link\\?url=https${S}${I}${I}angular-team\\.atlassian\\.net${I}browse${I}([A-Z]+-\\d+)$`).exec(link.href);
+          new RegExp(`^https://slack-redir\\.net/link\\?url=https${P}3A${P}2F${P}2Fangular-team\\.atlassian\\.net${P}2Fbrowse${P}2F([A-Z]+-\\d+)$`).exec(link.href);
 
         if (hrefMatch) {
           link.classList.add(CLASS_JIRA_LINK);
