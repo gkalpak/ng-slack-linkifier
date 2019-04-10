@@ -7,17 +7,33 @@ javascript:/* eslint-disable-line no-unused-labels *//*
  *
  * - Markdown-like links (of the form `[some text](/some/url)`) to actual links.
  *
+ * - URLs to GitHub commits to short links. E.g.:
+ *   - `https://github.com/angular/angular/commit/a1b2c3d4e5` --> `angular@a1b2c3d4e5`
+ *   - `https://github.com/angular/angular-cli/commit/b2c3d4e5f6` --> `angular-cli@b2c3d4e5f6`
+ *   - `https://github.com/not-angular/some-lib/commit/c3d4e5f6g7` --> `not-angular/some-lib@c3d4e5f6g7`
+ *
+ * - GitHub commits of the format `[<owner>/]<repo>@<sha>` to links. If omitted `<owner>` defaults to `angular`. In
+ *   order for commits to be recognized at least the first 7 characters of the SHA must be provided. E.g.:
+ *   - `angular@a1b2c3d` or `angular/angular@a1b2c3d` -->
+ *     `[angular@a1b2c3d](https://github.com/angular/angular/commit/a1b2c3d)`
+ *   - `angular-cli@b2c3d4e5f6` or `angular/angular-cli@b2c3d4e5f6` -->
+ *     `[`angular-cli@b2c3d4e`](https://github.com/angular/angular-cli/commit/b2c3d4e5f6)`
+ *   - `not-angular/some-lib@c3d4e5f6` -->
+ *     `[not-angular/some-lib@c3d4e5f](https://github.com/not-angular/some-lib/commit/c3d4e5f6`
+ *
  * - URLs to GitHub issues/PRs to short links. E.g.:
  *   - `https://github.com/angular/angular/issues/12345` --> `#12345`
  *   - `https://github.com/angular/angular-cli/pull/23456` --> `angular-cli#23456`
- *   - `https://github.com/not-angular/some-lib/pull/34567` --> `not-angular/material2#34567`
+ *   - `https://github.com/not-angular/some-lib/pull/34567` --> `not-angular/some-lib@#34567`
  *
  * - GitHub issues/PRs of the format `[[<owner>/]<repo>]#<issue-or-pr>` to links. If omitted `<owner>` and `<repo>`
  *   default to `angular`. E.g.:
  *   - `#12345` or `angular#12345` or `angular/angular#12345` -->
  *     `[#12345](https://github.com/angular/angular/issues/12345)`
- *   - `angular-cli#23456` --> link to `https://github.com/angular/angular-cli/issues/23456`
- *   - `not-angular/some-lib#12345` --> link to `https://github.com/not-angular/some-lib/issues/34567`
+ *   - `angular-cli#23456` or `angular/angular-cli#23456` -->
+ *     `[angular-cli#23456](https://github.com/angular/angular-cli/issues/23456)`
+ *   - `not-angular/some-lib#34567` -->
+ *     [not-angular/some-lib#34567](https://github.com/not-angular/some-lib/issues/34567)`
  *
  * - URLs to Jira-like issues for `angular-team` to short links. (Recognizes the format `XYZ-<number>`.) E.g.:
  *   - `https://angular-team.atlassian.net/browse/FW-12345` --> `FW-12345`
@@ -44,7 +60,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
   const NAME = 'NgSlackLinkifier';
   const VERSION = 'X.Y.Z-VERSION';
 
-  const CLASS_GITHUB_LINK = 'nsl-github';
+  const CLASS_GITHUB_COMMIT_LINK = 'nsl-github-commit';
+  const CLASS_GITHUB_ISSUE_LINK = 'nsl-github-issue';
   const CLASS_JIRA_LINK = 'nsl-jira';
   const CLASS_PROCESSED = 'nsl-processed';
   const CLASS_POST_PROCESSED = 'nsl-post-processed';
@@ -278,7 +295,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     _processNode(node, forcePostProcess) {
       const processedNodes = new Set([
         ...this._processNodeMdLinks(node),
-        ...this._processNodeGithub(node),
+        ...this._processNodeGithubCommits(node),
+        ...this._processNodeGithubIssues(node),
         ...this._processNodeJira(node),
       ]);
 
@@ -286,8 +304,69 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       if (forcePostProcess || processedNodes.size) this._postProcessNode(node);
     }
 
+    /* Process GitHub-like commits. */
+    _processNodeGithubCommits(node) {
+      const processedNodes = new Set();
+
+      const acceptNode = x => this._acceptNodeInTextNodeWalker(x);
+      const treeWalker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, {acceptNode}, false);
+      let t;
+
+      while ((t = treeWalker.nextNode())) {
+        const textMatch = /(?:([\w-]+)\/)?([\w-]+)@([A-Fa-f\d]{7,})\b/.exec(t.textContent);
+
+        if (textMatch) {
+          const [, owner = 'angular', repo = 'angular', commit] = textMatch;
+          const url = `https://github.com/${owner}/${repo}/commit/${commit}`;
+          const link = Object.assign(document.createElement('a'), {
+            href: url,
+            target: '_blank',
+            textContent: url,
+          });
+
+          const trailingText = document.createTextNode(t.textContent.slice(textMatch.index + textMatch[0].length));
+
+          t.textContent = t.textContent.slice(0, textMatch.index);
+          t.after(link);
+          link.after(trailingText);
+
+          processedNodes.add(link);
+        }
+      }
+
+      node.querySelectorAll(`a:not(.${CLASS_PROCESSED})`).forEach(link => {
+        const hrefMatch = /^https:\/\/github\.com\/([\w-]+)\/([\w-]+)\/commit\/([A-Fa-f\d]{7,})$/.exec(link.href) ||
+          /* eslint-disable-next-line max-len */
+          new RegExp(`^https://slack-redir\\.net/link\\?url=https${P}3A${P}2F${P}2Fgithub\\.com${P}2F([\\w-]+)${P}2F([\\w-]+)${P}2Fcommit${P}2F([A-Fa-f\\d]{7,})$`).exec(link.href);
+
+        if (hrefMatch) {
+          const [, owner, repo, commit] = hrefMatch;
+
+          link.classList.add(CLASS_GITHUB_COMMIT_LINK);
+          link.dataset.nslOwner = owner;
+          link.dataset.nslRepo = repo;
+          link.dataset.nslCommit = commit;
+
+          processedNodes.add(link);
+        }
+
+        const htmlMatch = /^https:\/\/github\.com\/([\w-]+)\/([\w-]+)\/commit\/([A-Fa-f\d]{7,})$/.exec(link.innerHTML);
+
+        if (htmlMatch) {
+          const [, owner, repo, commit] = htmlMatch;
+          const repoSlug = `${(owner === 'angular') ? '' : `${owner}/`}${repo}`;
+
+          link.innerHTML = `<b>${repoSlug}@${commit.slice(0, 7)}</b>`;
+
+          processedNodes.add(link);
+        }
+      });
+
+      return processedNodes;
+    }
+
     /* Process GitHub-like issues/PRs. */
-    _processNodeGithub(node) {
+    _processNodeGithubIssues(node) {
       const processedNodes = new Set();
 
       const acceptNode = x => this._acceptNodeInTextNodeWalker(x);
@@ -324,7 +403,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         if (hrefMatch) {
           const [, owner, repo, issue] = hrefMatch;
 
-          link.classList.add(CLASS_GITHUB_LINK);
+          link.classList.add(CLASS_GITHUB_ISSUE_LINK);
           link.dataset.nslOwner = owner;
           link.dataset.nslRepo = repo;
           link.dataset.nslNumber = issue;
@@ -507,7 +586,12 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     _addListeners(node) {
       const processedNodes = new Set();
 
-      node.querySelectorAll(`.${CLASS_GITHUB_LINK}:not(.${CLASS_POST_PROCESSED})`).forEach(link => {
+      node.querySelectorAll(`.${CLASS_GITHUB_COMMIT_LINK}:not(.${CLASS_POST_PROCESSED})`).forEach(link => {
+        processedNodes.add(link);
+        this._addListenersForLink(link, data => this._getPopupContentForGithubCommit(data));
+      });
+
+      node.querySelectorAll(`.${CLASS_GITHUB_ISSUE_LINK}:not(.${CLASS_POST_PROCESSED})`).forEach(link => {
         processedNodes.add(link);
         this._addListenersForLink(link, data => this._getPopupContentForGithubIssue(data));
       });
@@ -524,24 +608,24 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     _addListenersForLink(link, getPopupContent) {
-        const linkStyle = link.style;
-        const linkData = link.dataset;
-        const cursorStyle = 'help';
-        let interactionId = 0;
+      const linkStyle = link.style;
+      const linkData = link.dataset;
+      const cursorStyle = 'help';
+      let interactionId = 0;
 
-        const onMouseenter = async evt => {
-          try {
-            const id = interactionId;
+      const onMouseenter = async evt => {
+        try {
+          const id = interactionId;
 
-            await new Promise(resolve => setTimeout(resolve, 500));
-            if (id !== interactionId) return;  /* Abort if already "mouseleft". */
+          await new Promise(resolve => setTimeout(resolve, 500));
+          if (id !== interactionId) return;  /* Abort if already "mouseleft". */
 
-            linkStyle.cursor = 'progress';
+          linkStyle.cursor = 'progress';
 
           const html = await getPopupContent(linkData);
-            if (id !== interactionId) return;  /* Abort if already "mouseleft". */
+          if (id !== interactionId) return;  /* Abort if already "mouseleft". */
 
-            linkStyle.cursor = cursorStyle;
+          linkStyle.cursor = cursorStyle;
 
           this._uiUtils.showPopup(html, evt);
         } catch (err) {
@@ -564,6 +648,76 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         () => link.removeEventListener('mouseleave', onMouseleave));
     }
 
+    async _getPopupContentForGithubCommit(data) {
+      const colorPerStatus = {added: 'green', modified: 'darkorchid', removed: 'red', renamed: 'blue'};
+
+      const owner = data.nslOwner;
+      const repo = data.nslRepo;
+      const commit = data.nslCommit;
+
+      const info = await this._ghUtils.getCommitInfo(owner, repo, commit);
+      const subject = info.message.split('\n', 1).pop();
+      const body = info.message.slice(subject.length).trim();
+
+      const fileHtml = file => `
+        <div
+            style="align-items: baseline; cursor: help; display: flex; margin: 0 15px 10px;"
+            title="${file.patch.replace(/"/g, '&quot;').replace(/\n/g, '\u000A')}">
+          <small style="
+                background-color: ${colorPerStatus[file.status]};
+                border-radius: 6px;
+                color: white;
+                font-size: 0.75em;
+                line-height: 1em;
+                margin-right: 5px;
+                min-width: 55px;
+                opacity: 0.5;
+                padding: 2px 4px;
+                text-align: center;
+              ">
+            ${file.status}
+          </small>
+          <span style="flex: auto; white-space: nowrap;">
+            ${file.filename}
+          </span>
+          <small style="text-align: right; white-space: nowrap;">
+            <span style="color: ${colorPerStatus.added}; display: inline-block; min-width: 33px;">
+              +${file.stats.additions}
+            </span>
+            <span style="color: ${colorPerStatus.removed}; display: inline-block; min-width: 33px;">
+              -${file.stats.deletions}
+            </span>
+          </small>
+        </div>
+      `;
+
+      return `
+        <p style="display: flex; font-size: 0.9em; justify-content: space-between;">
+          <span>
+            <img src="${info.author.avatar}" width="25" height="25" style="border-radius: 6px;" />
+            <a href="${info.author.url}" target="_blank">@${info.author.username}</a>
+          </span>
+          <small style="color: gray; text-align: right;">
+            Committed on: ${info.committerDate.toLocaleString()}
+          </small>
+        </p>
+        <p style="align-items: flex-start; display: flex; font-size: 1.25em;">
+          <b>${subject}</b>
+          <span style="color: gray; margin-left: 5px;">@${info.sha.slice(0, 7)}</span>
+        </p>
+        ${body && `<br /><pre>${body}</pre>`}
+        <hr />
+        <p>
+          <b>Files (${info.files.length}):</b>
+          <div style="overflow: auto;">
+            <div style="display: flex; flex-direction: column; width: fit-content;">
+              ${info.files.map(fileHtml).join('')}
+            </div>
+          </div>
+        </p>
+      `;
+    }
+
     async _getPopupContentForGithubIssue(data) {
       const colorPerState = {closed: 'red', draft: 'gray', merged: 'darkorchid', open: 'green'};
 
@@ -572,51 +726,50 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       const number = data.nslNumber;
 
       const info = await this._ghUtils.getIssueInfo(owner, repo, number);
-            const description = info.description.replace(/^<!--[^]*?-->\s*/, '');
+      const description = info.description.replace(/^<!--[^]*?-->\s*/, '');
 
       return `
-              <p style="display: flex; font-size: 0.75em; justify-content: space-between;">
-                <span>
-                  <img src="${info.author.avatar}" width="25" height="25" style="border-radius: 6px;" />
-                  <a href="${info.author.url}" target="_blank">@${info.author.username}</a>
-                </span>
-                <span style="text-align: right;">
-                  ${info.labels.sort().map(l => `
-                    <small style="
-                          border: 1px solid;
-                          border-radius: 6px;
-                          line-height: 2.5em;
-                          margin: 0 3px;
-                          padding: 2px 4px;
-                          text-align: center;
-                          white-space: nowrap;
-                        ">${l}</small>
-                  `).join('\n')}
-                </span>
-              </p>
-              <p style="align-items: flex-start; display: flex; font-size: 1.25em;">
-                <span style="
-                      background-color: ${colorPerState[info.state]};
-                      border-radius: 6px;
-                      color: white;
-                      font-size: 0.75em;
-                      justify-content: center;
-                      margin-right: 5px;
-                      padding: 2px 4px;
-                      text-align: center;
-                    ">
-                  ${info.state.toUpperCase()}
-                </span>
-                <b>${info.title}</b>
+        <p style="display: flex; font-size: 0.9em; justify-content: space-between;">
+          <span>
+            <img src="${info.author.avatar}" width="25" height="25" style="border-radius: 6px;" />
+            <a href="${info.author.url}" target="_blank">@${info.author.username}</a>
+          </span>
+          <span style="text-align: right;">
+            ${info.labels.sort().map(l => `
+              <small style="
+                    border: 1px solid;
+                    border-radius: 6px;
+                    line-height: 2.5em;
+                    margin: 0 3px;
+                    padding: 2px 4px;
+                    text-align: center;
+                    white-space: nowrap;
+                  ">${l}</small>
+            `).join('\n')}
+          </span>
+        </p>
+        <p style="align-items: flex-start; display: flex; font-size: 1.25em;">
+          <span style="
+                background-color: ${colorPerState[info.state]};
+                border-radius: 6px;
+                color: white;
+                font-size: 0.75em;
+                margin-right: 5px;
+                padding: 2px 4px;
+                text-align: center;
+              ">
+            ${info.state.toUpperCase()}
+          </span>
+          <b>${info.title}</b>
           <span style="color: gray; margin-left: 5px;">#${info.number}</span>
-              </p>
-              <br />
-              <pre>${description}</pre>
-            `;
-          }
+        </p>
+        <br />
+        <pre>${description}</pre>
+      `;
+    }
 
     async _getPopupContentForJira(data) {
-        /* TODO(gkalpak): Implement popup for Jira issues. */
+      /* TODO(gkalpak): Implement popup for Jira issues. */
       return `
         <div style="color: orange; font-size: 1.25em; text-align: center;">
           [${data.nslNumber}] Fetching info for Jira issues is not yet supported :(
@@ -1132,7 +1285,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         if (right - left < idealWidth) left = Math.max(margin, right - idealWidth);
 
         return {left: `${left}px`, right: `${window.innerWidth - right}px`};
-          };
+      };
 
       return {
         maxHeight: `${Math.min(maxIdealHeight, (placeAbove ? topDistance : bottomDistance) - margin)}px`,

@@ -39,20 +39,28 @@ This comment is a good starting point for manual testing:
 - This is a [markdown link](https://google.com/).
 - This is a [markdown link to a GitHub issue](https://github.com/angular/angular/issues/12345).
 - This is markdown link references [GitHub PR #23456](https://google.com/), but points to a different URL.
-- This is a [markdown link to a Jira issue](https://angular-team.atlassian.com/browse/FW-1234).
+- This is a [markdown link to a Jira issue](https://angular-team.atlassian.net/browse/FW-1234).
 - This is markdown link references [Jira issue TOOL-23](https://google.com/), but points to a different URL.
+
+*GitHub commits*
+- This is the 1st Angular commit on GitHub: https://github.com/angular/angular/commit/6a3abf2366e2c32 (crazy, ha?)
+- This is another commit on GitHub: https://github.com/angular/angular-cli/commit/246abb39359259a (for `angular-cli`)
+- This is (supposedly) yet another GitHub PR: https://github.com/reactivex/rxjs/commit/66338ffc540a001
+- These are "raw" references commits on GitHub: angular@6a3abf2366e2c32, angular-cli@246abb3, reactivex/rxjs@66338ffc540a001 (see the link?)
+- These are not, but still recognized as such: notexists@9999999999, https://github.com/neither/this/commit/9999999999
+- These are not recognized: angular@6a3abf _(too short)_, @6a3abf2366e2c32 _(missing repo)_
 
 *GitHub issues/PRs*
 - This is (supposedly) a GitHub PR: https://github.com/angular/angular/pull/2345 (or is it?)
 - This is (supposedly) another GitHub PR: https://github.com/angular/angular-cli/pull/345 (for `angular-cli`)
 - This is (supposedly) yet another GitHub PR: https://github.com/reactivex/rxjs/pull/45
-- These are "raw" references to GitHub issues/PRs: #2345, angular-cli#345, reactivex/rxjs#45 (see the link?)
+- These are "raw" references to GitHub issues/PRs: #2345, angular/angular#5432, angular-cli#345, reactivex/rxjs#45 (see the link?)
 - These are not, but still recognized as such: #999999, notexists#999999, https://github.com/neither/this/issues/999999
 
 *Jira issues*
 - This is (supposedly) a Jira issue: https://angular-team.atlassian.net/browse/FW-1234 (or is it?)
-- This is (supposedly) another Jirs issue: (https://angular-team.atlassian.net/browse/TOOL-345) (parenthesized)
-- This is (supposedly) yet another Jirs issue: https://angular-team.atlassian.net/browse/COMP-45
+- This is (supposedly) another Jira issue: (https://angular-team.atlassian.net/browse/TOOL-345) (parenthesized)
+- This is (supposedly) yet another Jira issue: https://angular-team.atlassian.net/browse/COMP-45
 - These are "raw" references to Jira issues: FW-1234, TOOL-345, COMP-45 (see the link? :stuck_out_tongue:)
 - These are not, but still recongized as such: NOTEXISTS-1337, NEITHERTHIS-7331 ¯\_(ツ)_/¯
 ```
@@ -62,17 +70,17 @@ This comment is a good starting point for manual testing:
 
 Things I want to (but won't necessarily) do:
 
+- Show info for Jira issues (requires Jira access token).
 - Remove stored Github access token on `401 - Bad credentials`.
 - Offer to bring up the dialog for adding a Github access token, when rate-limit is reached.
 - Consider postponing prompts for tokens, until they are needed. (E.g. prompt for GitHub token, when/if anonymous rate-limit is reached).
 - Add support for removing/resetting tokens via the UI.
 - Add support for resetting prompts via the UI.
 - Recognize, shorten and show info for more GitHub URLs.
-  - More PR URL formats (e.g. `/files`?, `#issuecomment-12345` (and similar forms)?).
-  - Commit (and PR commit) URLs.
+  - More PR URL formats (e.g. `/files`?, `/commits/...`?, `#issuecomment-12345` (and similar forms)?).
+  - More commit URLs (e.g. `#diff...`?).
   - File URLs (e.g. https://github.com/angular/angular/blob/84be7c52d/path/to/file.ext#L13-L37).
   - Jason's `https://git.io/fjLYY/12345` shortened URLs.
-- Show info for Jira issues (requires Jira access token).
 
 - Add tests.
 - Add CI support.
