@@ -54,7 +54,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
  * Currently, GitHub URLs are recognized if they end in the GitHub issue/PR number.
  * E.g. `.../issues/12345` is recongized, but `.../issues/12345/files` or `.../issues/12345#issuecomment-67890` isn't.
  */
-(() => {'use strict';
+((window, document) => {'use strict';
 
   /* Constants */
   const NAME = 'NgSlackLinkifier';
@@ -183,7 +183,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       let response = this._getFromCache(url);
 
       if (!response) {
-        response = fetch(url, {headers: this._headers}).
+        response = window.fetch(url, {headers: this._headers}).
           then(async res => res.ok ? res.json() : Promise.reject(await this._getErrorForResponse(res))).
           catch(err => {
             if (this._getFromCache(url) === response) this._cache.delete(url);
@@ -1376,4 +1376,4 @@ javascript:/* eslint-disable-line no-unused-labels *//*
   /* Run */
   new Program().main();
 
-})();
+})(window, window.document);
