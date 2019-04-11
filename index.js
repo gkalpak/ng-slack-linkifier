@@ -1069,7 +1069,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       this._logUtils.error(err);
       this._uiUtils.showSnackbar(
         '<pre style="background-color: white; border: none; color: red;">' +
-          `<b>${err.message || err}</b><br />` +
+          `<b>${this._uiUtils.escapeHtml(err.message || err)}</b><br />` +
           '<small>(See the console for more details.)</small>' +
         '</pre>',
         10000);
@@ -1200,6 +1200,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       this._showPopupTimeout = null;
 
       this._snackbarContainer = this._createSnackbarContainer();
+      this._scratchpad = document.createElement('div');
     }
 
     cleanUp() {
@@ -1209,6 +1210,14 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       this.hidePopup();
 
       this._snackbarContainer.remove();
+    }
+
+    escapeHtml(html) {
+      this._scratchpad.textContent = html;
+      const escaped = this._scratchpad.innerHTML;
+      this._scratchpad.textContent = '';
+
+      return escaped;
     }
 
     hidePopup() {
