@@ -427,7 +427,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       let t;
 
       while ((t = treeWalker.nextNode())) {
-        const textMatch = /(?:([\w-]+)\/)?([\w-]+)@([A-Fa-f\d]{7,})\b/.exec(t.textContent);
+        const textMatch = /(?:([\w.-]+)\/)?([\w.-]+)@([A-Fa-f\d]{7,})\b/.exec(t.textContent);
 
         if (textMatch) {
           const [, owner = 'angular', repo = 'angular', commit] = textMatch;
@@ -449,9 +449,11 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       }
 
       node.querySelectorAll(`a:not(.${CLASS_PROCESSED})`).forEach(link => {
-        const hrefMatch = /^https:\/\/github\.com\/([\w-]+)\/([\w-]+)\/commit\/([A-Fa-f\d]{7,})$/.exec(link.href) ||
+        const githubCommitRe = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/commit\/([A-Fa-f\d]{7,})$/;
+
+        const hrefMatch = githubCommitRe.exec(link.href) ||
           /* eslint-disable-next-line max-len */
-          new RegExp(`^https://slack-redir\\.net/link\\?url=https${P}3A${P}2F${P}2Fgithub\\.com${P}2F([\\w-]+)${P}2F([\\w-]+)${P}2Fcommit${P}2F([A-Fa-f\\d]{7,})$`).exec(link.href);
+          new RegExp(`^https://slack-redir\\.net/link\\?url=https${P}3A${P}2F${P}2Fgithub\\.com${P}2F([\\w.-]+)${P}2F([\\w.-]+)${P}2Fcommit${P}2F([A-Fa-f\\d]{7,})$`).exec(link.href);
 
         if (hrefMatch) {
           const [, owner, repo, commit] = hrefMatch;
@@ -464,7 +466,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           processedNodes.add(link);
         }
 
-        const htmlMatch = /^https:\/\/github\.com\/([\w-]+)\/([\w-]+)\/commit\/([A-Fa-f\d]{7,})$/.exec(link.innerHTML);
+        const htmlMatch = githubCommitRe.exec(link.innerHTML);
 
         if (htmlMatch) {
           const [, owner, repo, commit] = htmlMatch;
@@ -488,7 +490,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       let t;
 
       while ((t = treeWalker.nextNode())) {
-        const textMatch = /(?:(?:([\w-]+)\/)?([\w-]+))?#(\d+)\b/.exec(t.textContent);
+        const textMatch = /(?:(?:([\w.-]+)\/)?([\w.-]+))?#(\d+)\b/.exec(t.textContent);
 
         if (textMatch) {
           const [, owner = 'angular', repo = 'angular', issue] = textMatch;
@@ -510,9 +512,11 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       }
 
       node.querySelectorAll(`a:not(.${CLASS_PROCESSED})`).forEach(link => {
-        const hrefMatch = /^https:\/\/github\.com\/([\w-]+)\/([\w-]+)\/(?:issues|pull)\/(\d+)$/.exec(link.href) ||
+        const githubIssueRe = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/(?:issues|pull)\/(\d+)$/;
+
+        const hrefMatch = githubIssueRe.exec(link.href) ||
           /* eslint-disable-next-line max-len */
-          new RegExp(`^https://slack-redir\\.net/link\\?url=https${P}3A${P}2F${P}2Fgithub\\.com${P}2F([\\w-]+)${P}2F([\\w-]+)${P}2F(?:issues|pull)${P}2F(\\d+)$`).exec(link.href);
+          new RegExp(`^https://slack-redir\\.net/link\\?url=https${P}3A${P}2F${P}2Fgithub\\.com${P}2F([\\w.-]+)${P}2F([\\w.-]+)${P}2F(?:issues|pull)${P}2F(\\d+)$`).exec(link.href);
 
         if (hrefMatch) {
           const [, owner, repo, issue] = hrefMatch;
@@ -525,7 +529,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           processedNodes.add(link);
         }
 
-        const htmlMatch = /^https:\/\/github\.com\/([\w-]+)\/([\w-]+)\/(?:issues|pull)\/(\d+)$/.exec(link.innerHTML);
+        const htmlMatch = githubIssueRe.exec(link.innerHTML);
 
         if (htmlMatch) {
           const [, owner, repo, issue] = htmlMatch;
@@ -573,7 +577,9 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       }
 
       node.querySelectorAll(`a:not(.${CLASS_PROCESSED})`).forEach(link => {
-        const hrefMatch = /^https:\/\/angular-team\.atlassian\.net\/browse\/([A-Z]+-\d+)$/.exec(link.href) ||
+        const jiraIssueRe = /^https:\/\/angular-team\.atlassian\.net\/browse\/([A-Z]+-\d+)$/;
+
+        const hrefMatch = jiraIssueRe.exec(link.href) ||
           /* eslint-disable-next-line max-len */
           new RegExp(`^https://slack-redir\\.net/link\\?url=https${P}3A${P}2F${P}2Fangular-team\\.atlassian\\.net${P}2Fbrowse${P}2F([A-Z]+-\\d+)$`).exec(link.href);
 
@@ -583,7 +589,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           processedNodes.add(link);
         }
 
-        const htmlMatch = /^https:\/\/angular-team\.atlassian\.net\/browse\/([A-Z]+-\d+)$/.exec(link.innerHTML);
+        const htmlMatch = jiraIssueRe.exec(link.innerHTML);
 
         if (htmlMatch) {
           link.innerHTML = `<b>${htmlMatch[1]}</b>`;

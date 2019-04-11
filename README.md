@@ -44,14 +44,16 @@ This comment is a good starting point for manual testing:
 
 *GitHub commits*
 - This is the 1st Angular commit on GitHub: https://github.com/angular/angular/commit/6a3abf2366e2c32 (crazy, ha?)
+- This is the 2st AngularJS commit on GitHub: https://github.com/angular/angular.js/commit/fac0e698a85ade9 (fun!)
 - This is another commit on GitHub: https://github.com/angular/angular-cli/commit/246abb39359259a (for `angular-cli`)
-- This is (supposedly) yet another GitHub PR: https://github.com/reactivex/rxjs/commit/66338ffc540a001
+- This is yet another commit on GitHub: https://github.com/reactivex/rxjs/commit/66338ffc540a001
 - These are "raw" references commits on GitHub: angular@6a3abf2366e2c32, angular-cli@246abb3, reactivex/rxjs@66338ffc540a001 (see the link?)
 - These are not, but still recognized as such: notexists@9999999999, https://github.com/neither/this/commit/9999999999
 - These are not recognized: angular@6a3abf _(too short)_, @6a3abf2366e2c32 _(missing repo)_
 
 *GitHub issues/PRs*
-- This is (supposedly) a GitHub PR: https://github.com/angular/angular/pull/2345 (or is it?)
+- This is (supposedly) a GitHub PR: https://github.com/angular/angular.js/pull/1111 (nr 1)
+- This is (supposedly) just a GitHub PR (pun intended): https://github.com/angular/angular/pull/2345 (or is it?)
 - This is (supposedly) another GitHub PR: https://github.com/angular/angular-cli/pull/345 (for `angular-cli`)
 - This is (supposedly) yet another GitHub PR: https://github.com/reactivex/rxjs/pull/45
 - These are "raw" references to GitHub issues/PRs: #2345, angular/angular#5432, angular-cli#345, reactivex/rxjs#45 (see the link?)
