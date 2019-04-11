@@ -546,19 +546,20 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         githubToken: 1,
       };
 
-      this._logUtils = new LogUtils(`${NAME} v${VERSION}`);
-      this._secretUtils = new SecretUtils();
-      this._storageUtils = new StorageUtils(NAME);
-      this._linkifier = new Linkifier(node => this._addListeners(node));
-      this._uiUtils = new UiUtils();
+
+      this._cleanUpables = [
+        this._logUtils = new LogUtils(`${NAME} v${VERSION}`),
+        this._secretUtils = new SecretUtils(),
+        this._storageUtils = new StorageUtils(NAME),
+
+        this._linkifier = new Linkifier(node => this._addListeners(node)),
+        this._uiUtils = new UiUtils(),
+      ];
+
       this._ghUtils = null;
 
       this._cleanUpFns = [
-        () => this._linkifier.cleanUp(),
-        () => this._logUtils.cleanUp(),
-        () => this._secretUtils.cleanUp(),
-        () => this._storageUtils.cleanUp(),
-        () => this._uiUtils.cleanUp(),
+        () => this._destroyedDeferred.reject(new IgnoredError('Cleaning up.')),
       ];
 
       this._destroyedDeferred = new Deferred();
@@ -567,9 +568,10 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     cleanUp() {
       this._logUtils.log('Uninstalling...');
 
-      this._destroyedDeferred.reject(new IgnoredError('Cleaning up.'));
-      this._cleanUpFns.forEach(fn => fn());
-      this._cleanUpFns = [];
+      while (this._cleanUpables.length || this._cleanUpFns.length) {
+        while (this._cleanUpables.length) this._cleanUpables.shift().cleanUp();
+        while (this._cleanUpFns.length) this._cleanUpFns.shift()();
+      }
 
       this._logUtils.log('Uninstalled.');
     }
