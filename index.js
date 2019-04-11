@@ -77,6 +77,12 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     static get TOKEN_NAME() { return this._notImplemented(); }
     static get TOKEN_DESCRIPTION_HTML() { return this._notImplemented(); }
 
+    static validateToken(token) {
+      if (!token || (typeof token !== 'string')) {
+        throw new Error(`Empty or invalid token (${typeof token}: ${token}). Please, provide an non-empty string.`);
+      }
+    }
+
     constructor() {
       this._cacheMaxAge = 60000;
       this._cache = new Map();
@@ -91,7 +97,11 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
     requiresToken() { this._notImplemented(); }
 
-    setToken(token) { this._notImplemented(token); }
+    setToken(token) {
+      this._headers = token ? this._generateHeaders(token) : undefined;
+    }
+
+    _generateHeaders(token) { this._notImplemented(token); }
 
     _getErrorForResponse(res) { this._notImplemented(res); }
 
@@ -203,10 +213,6 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         false;
     }
 
-    setToken(token) {
-      this._headers = token && {Authorization: `token ${token}`};
-    }
-
     _extractFileInfo(file) {
       return {
         filename: file.filename,
@@ -226,6 +232,10 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         username: user.login,
         url: user.html_url,
       };
+    }
+
+    _generateHeaders(token) {
+      return {Authorization: `token ${token}`};
     }
 
     async _getErrorForResponse(res) {
@@ -308,10 +318,21 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         <br />
         <p>
           <b>IMPORTANT:</b><br />
-          Enter the ${tokenName} in the field below in the format <code>&lt;email&gt;:&lt;token&gt;</code> (e.g.
+          Enter the ${tokenName} in the field below in the format <code>&lt;email&gt;:&lt;access-token&gt;</code> (e.g.
           <code>myself@mail.me:My4cc3ssT0k3n</code>).
         </p>
       `;
+    }
+
+    static validateToken(token) {
+      super.validateToken(token);
+
+      if (!/^[^:]+@[^:]+:./.test(token)) {
+        const hiddenToken = token.replace(/\w/g, '*');
+        throw new Error(
+          `Invalid token format (${hiddenToken}). ` +
+          'Please, provide the token in the form `<email>:<access-token>` (e.g. `myself@mail.me:My4cc3ssT0k3n`).');
+      }
     }
 
     constructor() {
@@ -336,15 +357,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       return !this._headers && 'Unauthenticated requests are not supported.';
     }
 
-    setToken(token) {
-      if (token && !/^[^:]+@[^:]+:./.test(token)) {
-        const hiddenToken = token.replace(/\w/g, '*');
-        throw new Error(
-          `Invalid token format (${hiddenToken}). ` +
-          'Please, provide it in the form `<email>:<token>` (e.g. `myself@mail.me:My4cc3ssT0k3n`).');
-      }
-
-      this._headers = token && {Authorization: `Basic ${window.btoa(token)}`};
+    _generateHeaders(token) {
+      return {Authorization: `Basic ${window.btoa(token)}`};
     }
 
     async _getErrorForResponse(res) {
@@ -967,32 +981,54 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       `;
     }
 
-    async _getTokenFor(providerClass, force = false) {
+    async _getTokenFor(providerClass, force = false, remainingAttempts = 3) {
       const storageKey = this._KEYS.get(providerClass);
-      const encryptedToken = this._storageUtils.inMemory.get(storageKey) ||
-        this._storageUtils.session.get(storageKey) ||
-        this._storageUtils.local.get(storageKey) ||
-        await this._whileNotDestroyed(
-          this._promptForToken(storageKey, providerClass.TOKEN_NAME, providerClass.TOKEN_DESCRIPTION_HTML, force));
-
-      if (!encryptedToken) return;
 
       try {
-        return await this._secretUtils.decrypt(encryptedToken);
+        const encryptedToken = this._storageUtils.inMemory.get(storageKey) ||
+          this._storageUtils.session.get(storageKey) ||
+          this._storageUtils.local.get(storageKey) ||
+          await this._whileNotDestroyed(this._promptForToken(providerClass, force));
+
+        if (!encryptedToken) return;
+
+        const token = await this._secretUtils.decrypt(encryptedToken);
+        providerClass.validateToken(token);
+        return token;
       } catch (err) {
+        if (err instanceof IgnoredError) throw err;
+
         this._storageUtils.inMemory.delete(storageKey);
         this._storageUtils.session.delete(storageKey);
         this._storageUtils.local.delete(storageKey);
 
-        throw err;
+        if (--remainingAttempts > 0) {
+          this._onError(err);
+          return this._getTokenFor(providerClass, force, remainingAttempts);
+        } else {
+          const warnMsg = `Unable to acquire a valid ${providerClass.TOKEN_NAME}. Giving up for now :(`;
+
+          this._logUtils.error(err);
+          this._logUtils.warn(warnMsg);
+          this._uiUtils.showSnackbar(
+            `<div style="color: orange;">
+              <b>${warnMsg}</b><br />
+              <small>(See the console for more details.)</small>
+            </div>`,
+            5000);
+        }
       }
     }
 
-    _promptForToken(storageKey, name, description, force = false) {
+    _promptForToken(providerClass, force = false) {
+      const storageKey = this._KEYS.get(providerClass);
       const allPrompts = this._storageUtils.local.get('prompts') || {};
       const prompts = allPrompts[storageKey] || (allPrompts[storageKey] = {});
 
       if (!force && prompts.noAutoCheck) return;
+
+      const tokenName = providerClass.TOKEN_NAME;
+      const tokenDescription = providerClass.TOKEN_DESCRIPTION_HTML;
 
       const ctxName = `${NAME}-ctx-${Date.now()}`;
       const ctx = window[ctxName] = {
@@ -1001,17 +1037,22 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         noAutoCheck: !!prompts.noAutoCheck,
       };
 
+      const savePrefs = () => {
+        prompts.noAutoCheck = ctx.noAutoCheck;
+        this._storageUtils.local.set('prompts', allPrompts);
+      };
+
       const dialogTemplate = `
-        <h2>No ${name} detected</h2>
+        <h2>No ${tokenName} detected</h2>
         <hr />
-        <p>It seems that you have not provided a ${name}.</p>
-        <p>${description}</p>
+        <p>It seems that you have not provided a ${tokenName}.</p>
+        <p>${tokenDescription}</p>
         <hr />
         <p>Would you like to provide one now?</p>
         <p>
           <form>
             <label style="cursor: default; display: block; margin-bottom: 10px;">
-              ${name}:
+              ${tokenName}:
               <div style="align-items: center; display: flex; position: relative;">
                 <input
                     type="password"
@@ -1066,26 +1107,18 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         showDialog(dialogTemplate, 'Store token', 'Not now').
         finally(() => delete window[ctxName]).
         then(async ok => {
-          prompts.noAutoCheck = ctx.noAutoCheck;
-          this._storageUtils.local.set('prompts', allPrompts);
-
-          if (!ok) return;
-
-          const storage = this._storageUtils[ctx.storage];
-          if (!ctx.token || !storage) {
-            const warnMsg =
-              `Unable to store the ${name}: Invalid data provided (token or storage target).\n` +
-              '(Proceeding without a token.)';
-
-            this._logUtils.warn(warnMsg);
-            this._uiUtils.showSnackbar(`<div style="color: orange;">${warnMsg.replace(/\n/g, '<br />')}</div>`, 5000);
-
+          if (!ok) {
+            savePrefs();
             return;
           }
 
+          providerClass.validateToken(ctx.token);
           const encryptedToken = await this._secretUtils.encrypt(ctx.token);
-          storage.set(storageKey, encryptedToken);
-          this._uiUtils.showSnackbar(`<b style="color: green;">Successfully stored ${name}.</b>`, 2000);
+          this._storageUtils[ctx.storage].set(storageKey, encryptedToken);
+
+          savePrefs();
+
+          this._uiUtils.showSnackbar(`<b style="color: green;">Successfully stored ${tokenName}.</b>`, 3000);
 
           return encryptedToken;
         });
@@ -1305,7 +1338,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           left: 0;
           right: 0;
           top: 0;
-          z-index: 9999;
+          z-index: 10200;
         `,
       });
 
@@ -1407,7 +1440,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           right: ${positioning.right};
           top: ${positioning.top};
           user-select: text;
-          z-index: 9999;
+          z-index: 10100;
         `,
       });
       this._insertContent(this._popup, htmlOrNode);
@@ -1538,7 +1571,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           pointer-events: none;
           position: fixed;
           right: 10px;
-          z-index: 9999;
+          z-index: 10300;
         `,
       });
 
