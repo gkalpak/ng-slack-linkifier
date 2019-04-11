@@ -73,6 +73,54 @@ javascript:/* eslint-disable-line no-unused-labels *//*
   const P = '%';
 
   /* Classes */
+  class AbstractInfoProvider {
+    constructor() {
+      this._cacheMaxAge = 60000;
+      this._cache = new Map();
+
+      this._headers = null;
+    }
+
+    cleanUp() {
+      this.setToken(null);
+      this._cache.clear();
+    }
+
+    _getErrorForResponse(res) { this._notImplemented(res); }
+
+    _getFromCache(url) {
+      if (!this._cache.has(url)) return undefined;
+
+      const {date, response} = this._cache.get(url);
+
+      if ((Date.now() - date) > this._cacheMaxAge) {
+        this._cache.delete(url);
+        return undefined;
+      }
+
+      return response;
+    }
+
+    _getJson(url) {
+      let response = this._getFromCache(url);
+
+      if (!response) {
+        response = window.fetch(url, {headers: this._headers}).
+          then(async res => res.ok ? res.json() : Promise.reject(await this._getErrorForResponse(res))).
+          catch(err => {
+            if (this._getFromCache(url) === response) this._cache.delete(url);
+            throw err;
+          });
+
+        this._cache.set(url, {date: Date.now(), response});
+      }
+
+      return response;
+    }
+
+    _notImplemented() { throw new Error('Not implemented.'); }
+  }
+
   class Deferred {
     constructor() {
       this.promise = new Promise((resolve, reject) => {
@@ -82,20 +130,15 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
   }
 
-  class GithubUtils {
+  class GithubUtils extends AbstractInfoProvider {
     constructor(token) {
-      this._cacheMaxAge = 60000;
-      this._cache = new Map();
-
+      super();
+      this._baseUrl = 'https://api.github.com/repos';
       this._headers = token && {Authorization: `token ${token}`};
     }
 
-    cleanUp() {
-      this._cache.clear();
-    }
-
     getCommitInfo(owner, repo, commit) {
-      const url = `https://api.github.com/repos/${owner}/${repo}/commits/${commit}`;
+      const url = `${this._baseUrl}/${owner}/${repo}/commits/${commit}`;
       return this._getJson(url).
         then(data => ({
           sha: data.sha,
@@ -113,7 +156,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     getIssueInfo(owner, repo, number) {
-      const url = `https://api.github.com/repos/${owner}/${repo}/issues/${number}`;
+      const url = `${this._baseUrl}/${owner}/${repo}/issues/${number}`;
       return this._getJson(url).
         then(data => ({
           number: data.number,
@@ -164,36 +207,6 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       }
 
       return new Error(`${res.status} (${res.statusText}) - ${data.message}`);
-    }
-
-    _getFromCache(url) {
-      if (!this._cache.has(url)) return undefined;
-
-      const {date, response} = this._cache.get(url);
-
-      if ((Date.now() - date) > this._cacheMaxAge) {
-        this._cache.delete(url);
-        return undefined;
-      }
-
-      return response;
-    }
-
-    _getJson(url) {
-      let response = this._getFromCache(url);
-
-      if (!response) {
-        response = window.fetch(url, {headers: this._headers}).
-          then(async res => res.ok ? res.json() : Promise.reject(await this._getErrorForResponse(res))).
-          catch(err => {
-            if (this._getFromCache(url) === response) this._cache.delete(url);
-            throw err;
-          });
-
-        this._cache.set(url, {date: Date.now(), response});
-      }
-
-      return response;
     }
   }
 
