@@ -653,7 +653,6 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         [JiraUtils, 2],
       ]);
 
-
       this._cleanUpables = [
         this._logUtils = new LogUtils(`${NAME} v${VERSION}`),
         this._secretUtils = new SecretUtils(),
@@ -1011,27 +1010,50 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         <p>Would you like to provide one now?</p>
         <p>
           <form>
-            <label style="display: block;">
+            <label style="cursor: default; display: block; margin-bottom: 10px;">
               ${name}:
-              <input
-                  type="password"
-                  placeholder="(required)"
-                  value="${ctx.token}"
-                  oninput="javascript:window['${ctxName}'].token = event.target.value;"
-                  />
+              <div style="align-items: center; display: flex; position: relative;">
+                <input
+                    type="password"
+                    placeholder="(required)"
+                    value="${ctx.token}"
+                    style="margin: 0;"
+                    oninput="javascript:window['${ctxName}'].token = event.target.value;"
+                    />
+                <span
+                    style="cursor: pointer; font-size: 2em; position: absolute; right: 10px;"
+                    onmousedown="javascript:event.target.previousElementSibling.type = 'text';"
+                    onmouseup="javascript:event.target.previousElementSibling.type = 'password';">
+                  👁️
+                </span>
+              </div>
             </label>
-            <label style="display: block;">
+            <label style="cursor: default; display: block; margin-bottom: 10px;">
               Store:
-              <select value="${ctx.store}" onchange="javascript:window['${ctxName}'].storage = event.target.value;">
-                <option value="local">Permanently (for this browser)</option>
-                <option value="session">Only for current session</option>
-              </select>
+              <div style="align-items: center; display: flex; position: relative;">
+                <select
+                    value="${ctx.store}"
+                    style="cursor: pointer;"
+                    onchange="javascript:window['${ctxName}'].storage = event.target.value;">
+                  <option value="local">Permanently (for this browser)</option>
+                  <option value="session">Only for current session</option>
+                </select>
+                <span style="
+                      font-size: 2em;
+                      pointer-events: none;
+                      position: absolute;
+                      right: 24px;
+                      transform: rotateZ(90deg);
+                    ">
+                  &#x276f;
+                </span>
+              </div>
             </label>
             <label style="display: block; text-align: right;">
               Do not ask again:
               <input
                   type="checkbox"
-                  style="margin-left: 15px; transform: translateX(-50%) scale(2);"
+                  style="margin-left: 15px; outline: none; transform: translateX(-50%) scale(2);"
                   ${ctx.noAutoCheck ? 'checked' : ''}
                   onclick="javascript:window['${ctxName}'].noAutoCheck = event.target.checked"
                   />
