@@ -1183,7 +1183,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       return true;
     }
 
-    showDialog(html, okBtnText, cancelBtnText) {
+    showDialog(htmlOrNode, okBtnText, cancelBtnText) {
       const deferred = new Deferred();
       const onClose = ok => {
         this._fadeOut(dialog);
@@ -1196,7 +1196,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         innerHTML: `
           <div class="nsl-dialog">
             <header class="nsl-dialog-header">${NAME} v${VERSION}</header>
-            <section class="nsl-dialog-content">${html}</section>
+            <section class="nsl-dialog-content"></section>
             <footer class="nsl-dialog-actions">
               <button class="nsl-dialog-btn-ok">${okBtnText}</button>
               <button class="nsl-dialog-btn-cancel">${cancelBtnText}</button>
@@ -1243,11 +1243,13 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           text-align: right;
         `,
       });
-      Object.assign(dialog.querySelector('.nsl-dialog-content'), {
-        style: `
-          user-select: text;
-        `,
-      });
+      this._insertContent(
+        Object.assign(dialog.querySelector('.nsl-dialog-content'), {
+          style: `
+            user-select: text;
+          `,
+        }),
+        htmlOrNode);
       Object.assign(dialog.querySelector('.nsl-dialog-actions'), {
         style: `
           display: flex;
@@ -1288,7 +1290,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       return deferred.promise;
     }
 
-    showPopup(html, evt) {
+    showPopup(htmlOrNode, evt) {
       this._cancelShowPopup();
       this.hidePopup();
 
@@ -1298,7 +1300,6 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
       this._popup = Object.assign(document.createElement('div'), {
         className: 'nsl-popup',
-        innerHTML: html,
         onmouseenter: onMouseenter,
         onmouseleave: onMouseleave,
         style: `
@@ -1318,16 +1319,17 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           z-index: 9999;
         `,
       });
+      this._insertContent(this._popup, htmlOrNode);
 
       document.body.appendChild(this._popup);
       this._fadeIn(this._popup);
     }
 
-    showSnackbar(html, duration = 2000) {
+    showSnackbar(htmlOrNode, duration = 2000) {
       const snackbar = Object.assign(document.createElement('div'), {
         className: 'nsl-snackbar',
         innerHTML: `
-          <section class="nsl-snackbar-content">${html}</section>
+          <section class="nsl-snackbar-content"></section>
           <button class="nsl-snackbar-btn-close">&#x2715;</button>
         `,
         style: `
@@ -1345,13 +1347,15 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         `,
       });
 
-      Object.assign(snackbar.querySelector('.nsl-snackbar-content'), {
-        style: `
-          overflow: auto;
-          padding: 10px 5px 10px 10px;
-          user-select: text;
-        `,
-      });
+      this._insertContent(
+        Object.assign(snackbar.querySelector('.nsl-snackbar-content'), {
+          style: `
+            overflow: auto;
+            padding: 10px 5px 10px 10px;
+            user-select: text;
+          `,
+        }),
+        htmlOrNode);
       Object.assign(snackbar.querySelector('.nsl-snackbar-btn-close'), {
         onclick: () => this._fadeOut(snackbar),
         onmouseenter: evt => evt.target.style.color = 'red',
@@ -1459,6 +1463,15 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     _fadeOut(elem, duration) {
       return this._animateProp(elem, 'opacity', 1, 0.1, duration).
         then(() => elem.remove());
+    }
+
+    _insertContent(parentNode, htmlOrNode) {
+      if (typeof htmlOrNode === 'string') {
+        parentNode.innerHTML = htmlOrNode;
+      } else {
+        parentNode.innerHTML = '';
+        parentNode.appendChild(htmlOrNode);
+      }
     }
 
     _withRafInterval(actions) {
