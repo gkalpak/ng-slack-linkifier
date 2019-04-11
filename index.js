@@ -89,6 +89,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       this._cache.clear();
     }
 
+    requiresToken() { this._notImplemented(); }
+
     setToken(token) { this._notImplemented(token); }
 
     _getErrorForResponse(res) { this._notImplemented(res); }
@@ -157,6 +159,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     constructor() {
       super();
       this._baseUrl = 'https://api.github.com/repos';
+      this._rateLimitResetTime = 0;
     }
 
     getCommitInfo(owner, repo, commit) {
@@ -194,6 +197,12 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         });
     }
 
+    requiresToken() {
+      return (this._rateLimitResetTime > Date.now()) ?
+        `Anonymous rate-limit reached (until ${new Date(this._rateLimitResetTime).toLocaleString()})` :
+        false;
+    }
+
     setToken(token) {
       this._headers = token && {Authorization: `token ${token}`};
     }
@@ -228,6 +237,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       if ((res.status === 403) && (headers.get('X-RateLimit-Remaining') == '0')) {
         const limit = headers.get('X-RateLimit-Limit');
         const reset = new Date(headers.get('X-RateLimit-Reset') * 1000);
+
+        this._rateLimitResetTime = reset.getTime();
 
         data.message = `0/${limit} API requests remaining until ${reset.toLocaleString()}.\n${data.message}`;
       }
@@ -319,6 +330,10 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       return this._getJson(url).
         then(data => ({...data})).
         catch(err => { throw new Error(`Error getting Jira info for ${number}:\n${err.message || err}`); });
+    }
+
+    requiresToken() {
+      return !this._headers && 'Unauthenticated requests are not supported.';
     }
 
     setToken(token) {
@@ -752,7 +767,40 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         () => link.removeEventListener('mouseleave', onMouseleave));
     }
 
+    _checkRequiresToken(provider) {
+      const requiresTokenReason = provider.requiresToken();
+      if (!requiresTokenReason) return;
+
+      const content = Object.assign(document.createElement('div'), {
+        innerHTML: `
+          <div style="color: orange;">
+            <p><b>Fetching info for this link requires a token.</b></p>
+            <p style="color: gray;">(Reason: ${requiresTokenReason})</p>
+          </div>
+          <div><button>Provide token now</button></div>
+        `,
+      });
+
+      Object.assign(content.querySelector('button'), {
+        onclick: () => this._getTokenFor(provider.constructor, true),
+        onmouseenter: evt => evt.target.style.borderColor = 'orange',
+        onmouseleave: evt => evt.target.style.borderColor = 'white',
+        style: `
+          background-color: cornflowerblue;
+          border: 2px solid white;
+          border-radius: 6px;
+          color: white;
+          padding: 10px 15px;
+        `,
+      });
+
+      return content;
+    }
+
     async _getPopupContentForGithubCommit(data) {
+      const requiresTokenContent = this._checkRequiresToken(this._ghUtils);
+      if (requiresTokenContent) return requiresTokenContent;
+
       const colorPerStatus = {added: 'green', modified: 'darkorchid', removed: 'red', renamed: 'blue'};
 
       const owner = data.nslOwner;
@@ -844,6 +892,9 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     async _getPopupContentForGithubIssue(data) {
+      const requiresTokenContent = this._checkRequiresToken(this._ghUtils);
+      if (requiresTokenContent) return requiresTokenContent;
+
       const colorPerState = {closed: 'red', draft: 'gray', merged: 'darkorchid', open: 'green'};
 
       const owner = data.nslOwner;
@@ -897,6 +948,9 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     async _getPopupContentForJira(data) {
+      const requiresTokenContent = this._checkRequiresToken(this._jiraUtils);
+      if (requiresTokenContent) return requiresTokenContent;
+
       const number = data.nslNumber;
 
       const info = await this._jiraUtils.getIssueInfo(number);
@@ -908,13 +962,13 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       `;
     }
 
-    async _getTokenFor(providerClass) {
+    async _getTokenFor(providerClass, force = false) {
       const storageKey = this._KEYS.get(providerClass);
       const encryptedToken = this._storageUtils.inMemory.get(storageKey) ||
         this._storageUtils.session.get(storageKey) ||
         this._storageUtils.local.get(storageKey) ||
         await this._whileNotDestroyed(
-          this._promptForToken(storageKey, providerClass.TOKEN_NAME, providerClass.TOKEN_DESCRIPTION_HTML));
+          this._promptForToken(storageKey, providerClass.TOKEN_NAME, providerClass.TOKEN_DESCRIPTION_HTML, force));
 
       if (!encryptedToken) return;
 

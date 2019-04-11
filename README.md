@@ -71,11 +71,17 @@ This comment is a good starting point for manual testing:
 Things I want to (but won't necessarily) do:
 
 - Remove stored Github access token on `401 - Bad credentials`.
+- Consider postponing prompts for tokens, until they are needed.
+  (E.g. prompt for GitHub token, when/if anonymous rate-limit is reached).
+  - Consider removing `noAutoCheck`.
+    - Consider removing `prompts` storage/retrieval logic.
 - Show info for Jira issues.
   - Add option for enabling use of `cors-anywhere` (store in storage).
   - Show proper popup.
 
 - Try out `DomUtils` and see if size/ergonomics improve.
+- Show more info for PRs (e.g. first try `.../pulls/<number>` and if it fails then `.../issues/<number>`?
+- Add support for removing/resetting tokens via the UI. (How?)
 - Recognize, shorten and show info for more GitHub URLs.
   - More PR URL formats (e.g. `/files`?, `/commits/...`?, `#issuecomment-12345` (and similar forms)?).
   - More commit URLs (e.g. `#diff...`?).
