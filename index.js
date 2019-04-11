@@ -282,6 +282,59 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
   }
 
+  class JiraUtils extends AbstractInfoProvider {
+    static get TOKEN_NAME() { return 'Jira e-mail and access token'; }
+    static get TOKEN_DESCRIPTION_HTML() {
+      const tokenName = this.TOKEN_NAME;
+      const tokenUrl = 'https://id.atlassian.com/manage/api-tokens';
+      return `
+        <p>
+          A ${tokenName} is required in order to retrieve info for links to Jira issues. Unauthenticated requests are
+          <b>not supported</b> by Jira's API, so you will not be able to see any info without providing a ${tokenName}.
+        </p>
+        <p>To create a Jira access token visit: <a href="${tokenUrl}" target="_blank">${tokenUrl}</a></p>
+        <p>Providing a ${tokenName} is <b>optional</b> (unless you want to see issue info in here).</p>
+        <br />
+        <p>
+          <b>IMPORTANT:</b><br />
+          Enter the ${tokenName} in the field below in the format <code>&lt;email&gt;:&lt;token&gt;</code> (e.g.
+          <code>myself@mail.me:My4cc3ssT0k3n</code>).
+        </p>
+      `;
+    }
+
+    constructor() {
+      super();
+      this._baseUrl = 'https://angular-team.atlassian.net/rest/api/3';
+    }
+
+    getIssueInfo(number) {
+      const url = `${this._baseUrl}/issue/${number}`;
+      return this._getJson(url).
+        then(data => ({...data})).
+        catch(err => { throw new Error(`Error getting Jira info for ${number}:\n${err.message || err}`); });
+    }
+
+    setToken(token) {
+      if (token && !/^[^:]+@[^:]+:./.test(token)) {
+        const hiddenToken = token.replace(/\w/g, '*');
+        throw new Error(
+          `Invalid token format (${hiddenToken}). ` +
+          'Please, provide it in the form `<email>:<token>` (e.g. `myself@mail.me:My4cc3ssT0k3n`).');
+      }
+
+      this._headers = token && {Authorization: `Basic ${window.btoa(token)}`};
+    }
+
+    async _getErrorForResponse(res) {
+      let data = await res.json();
+
+      if (!data.message) data = {message: JSON.stringify(data)};
+
+      return new Error(`${res.status} (${res.statusText}) - ${data.message}`);
+    }
+  }
+
   class Linkifier {
     constructor(postProcessNode = () => undefined) {
       this._postProcessNode = postProcessNode;
