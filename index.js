@@ -306,6 +306,12 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     constructor() {
       super();
       this._baseUrl = 'https://angular-team.atlassian.net/rest/api/3';
+
+      /* Prepend `https://cors-anywhere.herokuapp.com/` to the URL to work around CORS limitation. */
+      const corsAnywhereUrl = 'https://cors-anywhere.herokuapp.com';
+      this._baseUrl = `${corsAnywhereUrl}/${this._baseUrl}`;
+      window.alert(
+        `[JiraUtils]\n\nUsing '${corsAnywhereUrl}' to get info from Jira during development.\nDisable for production.`);
     }
 
     getIssueInfo(number) {
@@ -636,6 +642,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         this._uiUtils = new UiUtils(),
 
         this._ghUtils = new GithubUtils(),
+        this._jiraUtils = new JiraUtils(),
       ];
 
       this._cleanUpFns = [
@@ -668,6 +675,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         this._logUtils.log('Installing...');
 
         this._ghUtils.setToken(await this._getTokenFor(GithubUtils));
+        this._jiraUtils.setToken(await this._getTokenFor(JiraUtils));
 
         const root = document.querySelector('#client_body');
         this._linkifier.processAll([root], true);
@@ -889,11 +897,14 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     async _getPopupContentForJira(data) {
-      /* TODO(gkalpak): Implement popup for Jira issues. */
+      const number = data.nslNumber;
+
+      const info = await this._jiraUtils.getIssueInfo(number);
+
+      /* TODO(gkalpak): Implement proper popup for Jira issues. */
       return `
-        <div style="color: orange; font-size: 1.25em; text-align: center;">
-          [${data.nslNumber}] Fetching info for Jira issues is not yet supported :(
-        </div>
+        <b>Jira issue ${number}:</b>
+        <pre>${JSON.stringify(info, null, 2)}</pre>
       `;
     }
 
@@ -922,26 +933,26 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       const allPrompts = this._storageUtils.local.get('prompts') || {};
       const prompts = allPrompts[storageKey] || (allPrompts[storageKey] = {});
 
-      if (!force && prompts.noCheckOnStartup) return;
+      if (!force && prompts.noAutoCheck) return;
 
       const ctxName = `${NAME}-ctx-${Date.now()}`;
       const ctx = window[ctxName] = {
         token: '',
         storage: 'local',
-        noCheckOnStartup: !!prompts.noCheckOnStartup,
+        noAutoCheck: !!prompts.noAutoCheck,
       };
 
       const dialogTemplate = `
         <h2>No ${name} detected</h2>
         <hr />
-        <p>It seems like you have not provided a ${name}.</p>
+        <p>It seems that you have not provided a ${name}.</p>
         <p>${description}</p>
         <hr />
         <p>Would you like to provide one now?</p>
         <p>
           <form>
             <label style="display: block;">
-              Token:
+              ${name}:
               <input
                   type="password"
                   placeholder="(required)"
@@ -961,8 +972,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
               <input
                   type="checkbox"
                   style="margin-left: 15px; transform: translateX(-50%) scale(2);"
-                  ${ctx.noCheckOnStartup ? 'checked' : ''}
-                  onclick="javascript:window['${ctxName}'].noCheckOnStartup = event.target.checked"
+                  ${ctx.noAutoCheck ? 'checked' : ''}
+                  onclick="javascript:window['${ctxName}'].noAutoCheck = event.target.checked"
                   />
             </label>
           </form>
@@ -973,7 +984,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         showDialog(dialogTemplate, 'Store token', 'Not now').
         finally(() => delete window[ctxName]).
         then(async ok => {
-          prompts.noCheckOnStartup = ctx.noCheckOnStartup;
+          prompts.noAutoCheck = ctx.noAutoCheck;
           this._storageUtils.local.set('prompts', allPrompts);
 
           if (!ok) return;
