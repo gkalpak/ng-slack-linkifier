@@ -74,6 +74,9 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   /* Classes */
   class AbstractInfoProvider {
+    static get TOKEN_NAME() { return this._notImplemented(); }
+    static get TOKEN_DESCRIPTION_HTML() { return this._notImplemented(); }
+
     constructor() {
       this._cacheMaxAge = 60000;
       this._cache = new Map();
@@ -85,6 +88,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       this.setToken(null);
       this._cache.clear();
     }
+
+    setToken(token) { this._notImplemented(token); }
 
     _getErrorForResponse(res) { this._notImplemented(res); }
 
@@ -131,10 +136,27 @@ javascript:/* eslint-disable-line no-unused-labels *//*
   }
 
   class GithubUtils extends AbstractInfoProvider {
-    constructor(token) {
+    static get TOKEN_NAME() { return 'GitHub access token'; }
+    static get TOKEN_DESCRIPTION_HTML() {
+      const tokenName = this.TOKEN_NAME;
+      const tokenUrl = 'https://github.com/settings/tokens';
+      return `
+        <p>
+          A ${tokenName} can be used to make authenticated requests to GitHub's API, when retrieving info for links to
+          issues and PRs. Authenticated requests have a much higher limit for requests per hour (at the time of writing
+          5000 vs 60 for anonymous requests).
+        </p>
+        <p>
+          To create a ${tokenName} visit: <a href="${tokenUrl}" target="_blank">${tokenUrl}</a>
+          <i>(no scopes required)</i>
+        </p>
+        <p>Providing a ${tokenName} is <b>optional</b>.</p>
+      `;
+    }
+
+    constructor() {
       super();
       this._baseUrl = 'https://api.github.com/repos';
-      this._headers = token && {Authorization: `token ${token}`};
     }
 
     getCommitInfo(owner, repo, commit) {
@@ -170,6 +192,10 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         catch(err => {
           throw new Error(`Error getting GitHub info for ${owner}/${repo}#${number}:\n${err.message || err}`);
         });
+    }
+
+    setToken(token) {
+      this._headers = token && {Authorization: `token ${token}`};
     }
 
     _extractFileInfo(file) {
@@ -542,9 +568,10 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   class Program {
     constructor() {
-      this._KEYS = {
-        githubToken: 1,
-      };
+      this._KEYS = new Map([
+        [GithubUtils, 1],
+        [JiraUtils, 2],
+      ]);
 
 
       this._cleanUpables = [
@@ -554,9 +581,9 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
         this._linkifier = new Linkifier(node => this._addListeners(node)),
         this._uiUtils = new UiUtils(),
-      ];
 
-      this._ghUtils = null;
+        this._ghUtils = new GithubUtils(),
+      ];
 
       this._cleanUpFns = [
         () => this._destroyedDeferred.reject(new IgnoredError('Cleaning up.')),
@@ -580,14 +607,14 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       try {
         if (window.__ngSlackLinkifyCleanUp) window.__ngSlackLinkifyCleanUp();
 
-        this._logUtils.log('Installing...');
-
         window.__ngSlackLinkifyCleanUp = () => {
           this.cleanUp();
           window.__ngSlackLinkifyCleanUp = null;
         };
 
-        await Promise.race([this._init(), this._destroyedDeferred.promise]);
+        this._logUtils.log('Installing...');
+
+        this._ghUtils.setToken(await this._getTokenFor(GithubUtils));
 
         const root = document.querySelector('#client_body');
         this._linkifier.processAll([root], true);
@@ -817,11 +844,13 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       `;
     }
 
-    async _getToken(storageKey, name, description) {
+    async _getTokenFor(providerClass) {
+      const storageKey = this._KEYS.get(providerClass);
       const encryptedToken = this._storageUtils.inMemory.get(storageKey) ||
         this._storageUtils.session.get(storageKey) ||
         this._storageUtils.local.get(storageKey) ||
-        await this._promptForToken(storageKey, name, description);
+        await this._whileNotDestroyed(
+          this._promptForToken(storageKey, providerClass.TOKEN_NAME, providerClass.TOKEN_DESCRIPTION_HTML));
 
       if (!encryptedToken) return;
 
@@ -834,19 +863,6 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
         throw err;
       }
-    }
-
-    async _init() {
-      const githubTokenName = 'GitHub access token';
-      const githubToken = await this._getToken(this._KEYS.githubToken, githubTokenName, `
-        <p>
-          It can be used to make authenticated requests to GitHub's API, when retrieving issue/PR info. Authenticated
-          requests have a much higher limit for requests per hour (at the time of writing 5000 vs 60 for anonymous
-          requests).
-        </p>
-        <p>Providing a ${githubTokenName} is <b>optional</b>.</p>
-      `);
-      this._ghUtils = new GithubUtils(githubToken);
     }
 
     _promptForToken(storageKey, name, description, force = false) {
@@ -939,6 +955,10 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           '<small>(See the console for more details.)</small>' +
         '</pre>',
         10000);
+    }
+
+    _whileNotDestroyed(promise) {
+      return Promise.race([promise, this._destroyedDeferred.promise]);
     }
   }
 
