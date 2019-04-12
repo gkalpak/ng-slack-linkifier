@@ -72,6 +72,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
    */
   const P = '%';
 
+  const CLEANING_UP = new Error('Cleaning up.');
+
   /* Classes */
   class AbstractInfoProvider {
     static get TOKEN_NAME() { return this._notImplemented(); }
@@ -255,9 +257,6 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
       return new Error(`${res.status} (${res.statusText}) - ${data.message}`);
     }
-  }
-
-  class IgnoredError extends Error {
   }
 
   class InMemoryStorage {
@@ -680,7 +679,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       ];
 
       this._cleanUpFns = [
-        () => this._destroyedDeferred.reject(new IgnoredError('Cleaning up.')),
+        () => this._destroyedDeferred.reject(CLEANING_UP),
       ];
 
       this._destroyedDeferred = new Deferred();
@@ -996,7 +995,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         providerClass.validateToken(token);
         return token;
       } catch (err) {
-        if (err instanceof IgnoredError) throw err;
+        if (err === CLEANING_UP) throw err;
 
         this._storageUtils.inMemory.delete(storageKey);
         this._storageUtils.session.delete(storageKey);
@@ -1125,7 +1124,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     _onError(err) {
-      if (err instanceof IgnoredError) return;
+      if (err === CLEANING_UP) return;
 
       this._logUtils.error(err);
       this._uiUtils.showSnackbar(
