@@ -403,7 +403,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     async _getErrorForResponse(res) {
-      let data = await res.json();
+      const isJson = res.headers.get('Content-Type').includes('application/json');
+      let data = isJson ? await res.json() : (await res.text()).trim();
 
       if (!data.message) data = {message: JSON.stringify(data)};
 
