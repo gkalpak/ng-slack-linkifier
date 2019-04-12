@@ -1563,9 +1563,11 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           bottom: 10px;
           display: flex;
           flex-direction: column-reverse;
+          overflow: auto;
           pointer-events: none;
           position: fixed;
           right: 10px;
+          top: 10px;
           z-index: 10300;
         `,
       });
