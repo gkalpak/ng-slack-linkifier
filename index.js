@@ -72,8 +72,6 @@ javascript:/* eslint-disable-line no-unused-labels *//*
    */
   const P = '%';
 
-  const CLEANING_UP = new Error('Cleaning up.');
-
   /* Classes */
   class AbstractInfoProvider {
     static get TOKEN_NAME() { return this._notImplemented(); }
@@ -154,6 +152,10 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   class AbstractInvalidTokenError extends Error {
     get provider() { throw new Error('Not implemented.'); }
+  }
+
+  class CleaningUpMarkerError extends Error {
+    constructor() { super('Cleaning up.'); }
   }
 
   class Deferred {
@@ -719,7 +721,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       ];
 
       this._cleanUpFns = [
-        () => this._destroyedDeferred.reject(CLEANING_UP),
+        () => this._destroyedDeferred.reject(new CleaningUpMarkerError()),
       ];
 
       this._destroyedDeferred = new Deferred();
@@ -1033,7 +1035,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
         return token;
       } catch (err) {
-        if (err === CLEANING_UP) throw err;
+        if (err instanceof CleaningUpMarkerError) throw err;
 
         this._storageUtils.delete(storageKey);
 
@@ -1126,7 +1128,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
         return encryptedToken;
       } catch (err) {
-        if (err === CLEANING_UP) throw err;
+        if (err instanceof CleaningUpMarkerError) throw err;
 
         if (remainingAttempts > 0) {
           this._onError(err);
@@ -1147,7 +1149,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     _onError(err) {
-      if (err === CLEANING_UP) return;
+      if (err instanceof CleaningUpMarkerError) return;
 
       if (err instanceof AbstractInvalidTokenError) {
         const provider = err.provider;
@@ -1356,8 +1358,9 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       this._snackbarContainer.remove();
       this.hidePopup();
 
+      const cleaningUpMarker = new CleaningUpMarkerError();
       while (this._openDialogDeferreds.length) {
-        this._openDialogDeferreds.pop().reject(CLEANING_UP);
+        this._openDialogDeferreds.pop().reject(cleaningUpMarker);
       }
     }
 
