@@ -1,5 +1,5 @@
 javascript:/* eslint-disable-line no-unused-labels *//*
- * # NgSlackLinkifier v0.1.4
+ * # NgSlackLinkifier v0.2.0
  *
  * ## What it does
  *
@@ -54,11 +54,11 @@ javascript:/* eslint-disable-line no-unused-labels *//*
  * Currently, GitHub URLs are recognized if they end in the GitHub issue/PR number.
  * E.g. `.../issues/12345` is recongized, but `.../issues/12345/files` or `.../issues/12345#issuecomment-67890` isn't.
  */
-(() => {'use strict';
+((window, document) => {'use strict';
 
   /* Constants */
   const NAME = 'NgSlackLinkifier';
-  const VERSION = '0.1.4';
+  const VERSION = '0.2.0';
 
   const CLASS_GITHUB_COMMIT_LINK = 'nsl-github-commit';
   const CLASS_GITHUB_ISSUE_LINK = 'nsl-github-issue';
@@ -72,7 +72,74 @@ javascript:/* eslint-disable-line no-unused-labels *//*
    */
   const P = '%';
 
+  const CLEANING_UP = new Error('Cleaning up.');
+
   /* Classes */
+  class AbstractInfoProvider {
+    static get TOKEN_NAME() { return this._notImplemented(); }
+    static get TOKEN_DESCRIPTION_HTML() { return this._notImplemented(); }
+
+    static validateToken(token) {
+      if (!token || (typeof token !== 'string')) {
+        throw new Error(`Empty or invalid token (${typeof token}: ${token}). Please, provide an non-empty string.`);
+      }
+    }
+
+    constructor() {
+      this._cacheMaxAge = 60000;
+      this._cache = new Map();
+
+      this._headers = null;
+    }
+
+    cleanUp() {
+      this.setToken(null);
+      this._cache.clear();
+    }
+
+    requiresToken() { this._notImplemented(); }
+
+    setToken(token) {
+      this._headers = token ? this._generateHeaders(token) : undefined;
+    }
+
+    _generateHeaders(token) { this._notImplemented(token); }
+
+    _getErrorForResponse(res) { this._notImplemented(res); }
+
+    _getFromCache(url) {
+      if (!this._cache.has(url)) return undefined;
+
+      const {date, response} = this._cache.get(url);
+
+      if ((Date.now() - date) > this._cacheMaxAge) {
+        this._cache.delete(url);
+        return undefined;
+      }
+
+      return response;
+    }
+
+    _getJson(url) {
+      let response = this._getFromCache(url);
+
+      if (!response) {
+        response = window.fetch(url, {headers: this._headers}).
+          then(async res => res.ok ? res.json() : Promise.reject(await this._getErrorForResponse(res))).
+          catch(err => {
+            if (this._getFromCache(url) === response) this._cache.delete(url);
+            throw err;
+          });
+
+        this._cache.set(url, {date: Date.now(), response});
+      }
+
+      return response;
+    }
+
+    _notImplemented() { throw new Error('Not implemented.'); }
+  }
+
   class Deferred {
     constructor() {
       this.promise = new Promise((resolve, reject) => {
@@ -82,20 +149,33 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
   }
 
-  class GithubUtils {
-    constructor(token) {
-      this._cacheMaxAge = 60000;
-      this._cache = new Map();
-
-      this._headers = token && {Authorization: `token ${token}`};
+  class GithubUtils extends AbstractInfoProvider {
+    static get TOKEN_NAME() { return 'GitHub access token'; }
+    static get TOKEN_DESCRIPTION_HTML() {
+      const tokenName = this.TOKEN_NAME;
+      const tokenUrl = 'https://github.com/settings/tokens';
+      return `
+        <p>
+          A ${tokenName} can be used to make authenticated requests to GitHub's API, when retrieving info for links to
+          issues and PRs. Authenticated requests have a much higher limit for requests per hour (at the time of writing
+          5000 vs 60 for anonymous requests).
+        </p>
+        <p>
+          To create a ${tokenName} visit: <a href="${tokenUrl}" target="_blank">${tokenUrl}</a>
+          <i>(no scopes required)</i>
+        </p>
+        <p>Providing a ${tokenName} is <b>optional</b>.</p>
+      `;
     }
 
-    cleanUp() {
-      this._cache.clear();
+    constructor() {
+      super();
+      this._baseUrl = 'https://api.github.com/repos';
+      this._rateLimitResetTime = 0;
     }
 
     getCommitInfo(owner, repo, commit) {
-      const url = `https://api.github.com/repos/${owner}/${repo}/commits/${commit}`;
+      const url = `${this._baseUrl}/${owner}/${repo}/commits/${commit}`;
       return this._getJson(url).
         then(data => ({
           sha: data.sha,
@@ -113,7 +193,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     getIssueInfo(owner, repo, number) {
-      const url = `https://api.github.com/repos/${owner}/${repo}/issues/${number}`;
+      const url = `${this._baseUrl}/${owner}/${repo}/issues/${number}`;
       return this._getJson(url).
         then(data => ({
           number: data.number,
@@ -127,6 +207,12 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         catch(err => {
           throw new Error(`Error getting GitHub info for ${owner}/${repo}#${number}:\n${err.message || err}`);
         });
+    }
+
+    requiresToken() {
+      return (this._rateLimitResetTime > Date.now()) ?
+        `Anonymous rate-limit reached (until ${new Date(this._rateLimitResetTime).toLocaleString()})` :
+        false;
     }
 
     _extractFileInfo(file) {
@@ -150,6 +236,10 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       };
     }
 
+    _generateHeaders(token) {
+      return {Authorization: `token ${token}`};
+    }
+
     async _getErrorForResponse(res) {
       const headers = res.headers;
       let data = await res.json();
@@ -160,44 +250,13 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         const limit = headers.get('X-RateLimit-Limit');
         const reset = new Date(headers.get('X-RateLimit-Reset') * 1000);
 
+        this._rateLimitResetTime = reset.getTime();
+
         data.message = `0/${limit} API requests remaining until ${reset.toLocaleString()}.\n${data.message}`;
       }
 
       return new Error(`${res.status} (${res.statusText}) - ${data.message}`);
     }
-
-    _getFromCache(url) {
-      if (!this._cache.has(url)) return undefined;
-
-      const {date, response} = this._cache.get(url);
-
-      if ((Date.now() - date) > this._cacheMaxAge) {
-        this._cache.delete(url);
-        return undefined;
-      }
-
-      return response;
-    }
-
-    _getJson(url) {
-      let response = this._getFromCache(url);
-
-      if (!response) {
-        response = fetch(url, {headers: this._headers}).
-          then(async res => res.ok ? res.json() : Promise.reject(await this._getErrorForResponse(res))).
-          catch(err => {
-            if (this._getFromCache(url) === response) this._cache.delete(url);
-            throw err;
-          });
-
-        this._cache.set(url, {date: Date.now(), response});
-      }
-
-      return response;
-    }
-  }
-
-  class IgnoredError extends Error {
   }
 
   class InMemoryStorage {
@@ -240,6 +299,90 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
     _resetItems() {
       this._items = Object.create(null);
+    }
+  }
+
+  class JiraUtils extends AbstractInfoProvider {
+    static get TOKEN_NAME() { return 'Jira e-mail and access token'; }
+    static get TOKEN_DESCRIPTION_HTML() {
+      const tokenName = this.TOKEN_NAME;
+      const tokenUrl = 'https://id.atlassian.com/manage/api-tokens';
+      const corsAnywhereLink =
+        '<a href="https://cors-anywhere.herokuapp.com/" target="_blank">https://cors-anywhere.herokuapp.com/</a>';
+
+      return `
+        <p>
+          A ${tokenName} is required in order to retrieve info for links to Jira issues. Unauthenticated requests are
+          <b>not supported</b> by Jira's API, so you will not be able to see any info without providing a ${tokenName}.
+        </p>
+        <p>To create a Jira access token visit: <a href="${tokenUrl}" target="_blank">${tokenUrl}</a></p>
+        <p>Providing a ${tokenName} is <b>optional</b> (unless you want to see issue info in here).</p>
+        <br />
+        <p style="
+              background-color: rgba(255, 0, 0, 0.1);
+              border: 2px solid gray;
+              border-radius: 6px;
+              color: red;
+              padding: 7px;
+            ">
+          <b>WARNING:</b><br />
+          Currently, all requests to Jira's API are sent through ${corsAnywhereLink} in order to work around CORS
+          restrictions. There will, hopefully, be a better solution in the future, but for now <b>do not</b> provide a
+          ${tokenName}, unless you understand and feel comfortable with the implications of sending the requests
+          (including your encoded ${tokenName}) through ${corsAnywhereLink}.
+        </p>
+        <br />
+        <p>
+          <b>IMPORTANT:</b><br />
+          Enter the ${tokenName} in the field below in the format <code>&lt;email&gt;:&lt;access-token&gt;</code> (e.g.
+          <code>myself@mail.me:My4cc3ssT0k3n</code>).
+        </p>
+      `;
+    }
+
+    static validateToken(token) {
+      super.validateToken(token);
+
+      if (!/^[^:]+@[^:]+:./.test(token)) {
+        const hiddenToken = token.replace(/\w/g, '*');
+        throw new Error(
+          `Invalid token format (${hiddenToken}). ` +
+          'Please, provide the token in the form `<email>:<access-token>` (e.g. `myself@mail.me:My4cc3ssT0k3n`).');
+      }
+    }
+
+    constructor() {
+      super();
+      this._baseUrl = 'https://angular-team.atlassian.net/rest/api/3';
+
+      /*
+       * Prepend `https://cors-anywhere.herokuapp.com/` to the URL to work around CORS restrictions.
+       * TODO(gkalpak): Implement a more secure alternative.
+       */
+      this._baseUrl = `https://cors-anywhere.herokuapp.com/${this._baseUrl}`;
+    }
+
+    getIssueInfo(number) {
+      const url = `${this._baseUrl}/issue/${number}`;
+      return this._getJson(url).
+        then(data => ({...data})).
+        catch(err => { throw new Error(`Error getting Jira info for ${number}:\n${err.message || err}`); });
+    }
+
+    requiresToken() {
+      return !this._headers && 'Unauthenticated requests are not supported.';
+    }
+
+    _generateHeaders(token) {
+      return {Authorization: `Basic ${window.btoa(token)}`};
+    }
+
+    async _getErrorForResponse(res) {
+      let data = await res.json();
+
+      if (!data.message) data = {message: JSON.stringify(data)};
+
+      return new Error(`${res.status} (${res.statusText}) - ${data.message}`);
     }
   }
 
@@ -314,7 +457,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       let t;
 
       while ((t = treeWalker.nextNode())) {
-        const textMatch = /(?:([\w-]+)\/)?([\w-]+)@([A-Fa-f\d]{7,})\b/.exec(t.textContent);
+        const textMatch = /(?:([\w.-]+)\/)?([\w.-]+)@([A-Fa-f\d]{7,})\b/.exec(t.textContent);
 
         if (textMatch) {
           const [, owner = 'angular', repo = 'angular', commit] = textMatch;
@@ -336,9 +479,11 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       }
 
       node.querySelectorAll(`a:not(.${CLASS_PROCESSED})`).forEach(link => {
-        const hrefMatch = /^https:\/\/github\.com\/([\w-]+)\/([\w-]+)\/commit\/([A-Fa-f\d]{7,})$/.exec(link.href) ||
+        const githubCommitRe = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/commit\/([A-Fa-f\d]{7,})$/;
+
+        const hrefMatch = githubCommitRe.exec(link.href) ||
           /* eslint-disable-next-line max-len */
-          new RegExp(`^https://slack-redir\\.net/link\\?url=https${P}3A${P}2F${P}2Fgithub\\.com${P}2F([\\w-]+)${P}2F([\\w-]+)${P}2Fcommit${P}2F([A-Fa-f\\d]{7,})$`).exec(link.href);
+          new RegExp(`^https://slack-redir\\.net/link\\?url=https${P}3A${P}2F${P}2Fgithub\\.com${P}2F([\\w.-]+)${P}2F([\\w.-]+)${P}2Fcommit${P}2F([A-Fa-f\\d]{7,})$`).exec(link.href);
 
         if (hrefMatch) {
           const [, owner, repo, commit] = hrefMatch;
@@ -351,7 +496,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           processedNodes.add(link);
         }
 
-        const htmlMatch = /^https:\/\/github\.com\/([\w-]+)\/([\w-]+)\/commit\/([A-Fa-f\d]{7,})$/.exec(link.innerHTML);
+        const htmlMatch = githubCommitRe.exec(link.innerHTML);
 
         if (htmlMatch) {
           const [, owner, repo, commit] = htmlMatch;
@@ -375,7 +520,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       let t;
 
       while ((t = treeWalker.nextNode())) {
-        const textMatch = /(?:(?:([\w-]+)\/)?([\w-]+))?#(\d+)\b/.exec(t.textContent);
+        const textMatch = /(?:(?:([\w.-]+)\/)?([\w.-]+))?#(\d+)\b/.exec(t.textContent);
 
         if (textMatch) {
           const [, owner = 'angular', repo = 'angular', issue] = textMatch;
@@ -397,9 +542,11 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       }
 
       node.querySelectorAll(`a:not(.${CLASS_PROCESSED})`).forEach(link => {
-        const hrefMatch = /^https:\/\/github\.com\/([\w-]+)\/([\w-]+)\/(?:issues|pull)\/(\d+)$/.exec(link.href) ||
+        const githubIssueRe = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/(?:issues|pull)\/(\d+)$/;
+
+        const hrefMatch = githubIssueRe.exec(link.href) ||
           /* eslint-disable-next-line max-len */
-          new RegExp(`^https://slack-redir\\.net/link\\?url=https${P}3A${P}2F${P}2Fgithub\\.com${P}2F([\\w-]+)${P}2F([\\w-]+)${P}2F(?:issues|pull)${P}2F(\\d+)$`).exec(link.href);
+          new RegExp(`^https://slack-redir\\.net/link\\?url=https${P}3A${P}2F${P}2Fgithub\\.com${P}2F([\\w.-]+)${P}2F([\\w.-]+)${P}2F(?:issues|pull)${P}2F(\\d+)$`).exec(link.href);
 
         if (hrefMatch) {
           const [, owner, repo, issue] = hrefMatch;
@@ -412,7 +559,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           processedNodes.add(link);
         }
 
-        const htmlMatch = /^https:\/\/github\.com\/([\w-]+)\/([\w-]+)\/(?:issues|pull)\/(\d+)$/.exec(link.innerHTML);
+        const htmlMatch = githubIssueRe.exec(link.innerHTML);
 
         if (htmlMatch) {
           const [, owner, repo, issue] = htmlMatch;
@@ -460,7 +607,9 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       }
 
       node.querySelectorAll(`a:not(.${CLASS_PROCESSED})`).forEach(link => {
-        const hrefMatch = /^https:\/\/angular-team\.atlassian\.net\/browse\/([A-Z]+-\d+)$/.exec(link.href) ||
+        const jiraIssueRe = /^https:\/\/angular-team\.atlassian\.net\/browse\/([A-Z]+-\d+)$/;
+
+        const hrefMatch = jiraIssueRe.exec(link.href) ||
           /* eslint-disable-next-line max-len */
           new RegExp(`^https://slack-redir\\.net/link\\?url=https${P}3A${P}2F${P}2Fangular-team\\.atlassian\\.net${P}2Fbrowse${P}2F([A-Z]+-\\d+)$`).exec(link.href);
 
@@ -470,7 +619,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           processedNodes.add(link);
         }
 
-        const htmlMatch = /^https:\/\/angular-team\.atlassian\.net\/browse\/([A-Z]+-\d+)$/.exec(link.innerHTML);
+        const htmlMatch = jiraIssueRe.exec(link.innerHTML);
 
         if (htmlMatch) {
           link.innerHTML = `<b>${htmlMatch[1]}</b>`;
@@ -529,23 +678,25 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   class Program {
     constructor() {
-      this._KEYS = {
-        githubToken: 1,
-      };
+      this._KEYS = new Map([
+        [GithubUtils, 1],
+        [JiraUtils, 2],
+      ]);
 
-      this._logUtils = new LogUtils(`${NAME} v${VERSION}`);
-      this._secretUtils = new SecretUtils();
-      this._storageUtils = new StorageUtils(NAME);
-      this._linkifier = new Linkifier(node => this._addListeners(node));
-      this._uiUtils = new UiUtils();
-      this._ghUtils = null;
+      this._cleanUpables = [
+        this._logUtils = new LogUtils(`${NAME} v${VERSION}`),
+        this._secretUtils = new SecretUtils(),
+        this._storageUtils = new StorageUtils(NAME),
+
+        this._linkifier = new Linkifier(node => this._addListeners(node)),
+        this._uiUtils = new UiUtils(),
+
+        this._ghUtils = new GithubUtils(),
+        this._jiraUtils = new JiraUtils(),
+      ];
 
       this._cleanUpFns = [
-        () => this._linkifier.cleanUp(),
-        () => this._logUtils.cleanUp(),
-        () => this._secretUtils.cleanUp(),
-        () => this._storageUtils.cleanUp(),
-        () => this._uiUtils.cleanUp(),
+        () => this._destroyedDeferred.reject(CLEANING_UP),
       ];
 
       this._destroyedDeferred = new Deferred();
@@ -554,9 +705,10 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     cleanUp() {
       this._logUtils.log('Uninstalling...');
 
-      this._destroyedDeferred.reject(new IgnoredError('Cleaning up.'));
-      this._cleanUpFns.forEach(fn => fn());
-      this._cleanUpFns = [];
+      while (this._cleanUpables.length || this._cleanUpFns.length) {
+        while (this._cleanUpables.length) this._cleanUpables.shift().cleanUp();
+        while (this._cleanUpFns.length) this._cleanUpFns.shift()();
+      }
 
       this._logUtils.log('Uninstalled.');
     }
@@ -565,14 +717,15 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       try {
         if (window.__ngSlackLinkifyCleanUp) window.__ngSlackLinkifyCleanUp();
 
-        this._logUtils.log('Installing...');
-
         window.__ngSlackLinkifyCleanUp = () => {
           this.cleanUp();
           window.__ngSlackLinkifyCleanUp = null;
         };
 
-        await Promise.race([this._init(), this._destroyedDeferred.promise]);
+        this._logUtils.log('Installing...');
+
+        this._ghUtils.setToken(await this._getStoredTokenFor(GithubUtils));
+        this._jiraUtils.setToken(await this._getStoredTokenFor(JiraUtils));
 
         const root = document.querySelector('#client_body');
         this._linkifier.processAll([root], true);
@@ -649,7 +802,40 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         () => link.removeEventListener('mouseleave', onMouseleave));
     }
 
+    _checkRequiresToken(provider) {
+      const requiresTokenReason = provider.requiresToken();
+      if (!requiresTokenReason) return;
+
+      const content = Object.assign(document.createElement('div'), {
+        innerHTML: `
+          <div style="color: orange;">
+            <p><b>Fetching info for this link requires a token.</b></p>
+            <p style="color: gray;">(Reason: ${requiresTokenReason})</p>
+          </div>
+          <div><button>Provide token now</button></div>
+        `,
+      });
+
+      Object.assign(content.querySelector('button'), {
+        onclick: async () => provider.setToken(await this._promptForToken(provider.constructor)),
+        onmouseenter: evt => evt.target.style.borderColor = 'orange',
+        onmouseleave: evt => evt.target.style.borderColor = 'white',
+        style: `
+          background-color: cornflowerblue;
+          border: 2px solid white;
+          border-radius: 6px;
+          color: white;
+          padding: 10px 15px;
+        `,
+      });
+
+      return content;
+    }
+
     async _getPopupContentForGithubCommit(data) {
+      const requiresTokenContent = this._checkRequiresToken(this._ghUtils);
+      if (requiresTokenContent) return requiresTokenContent;
+
       const colorPerStatus = {added: 'green', modified: 'darkorchid', removed: 'red', renamed: 'blue'};
 
       const owner = data.nslOwner;
@@ -741,6 +927,9 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     async _getPopupContentForGithubIssue(data) {
+      const requiresTokenContent = this._checkRequiresToken(this._ghUtils);
+      if (requiresTokenContent) return requiresTokenContent;
+
       const colorPerState = {closed: 'red', draft: 'gray', merged: 'darkorchid', open: 'green'};
 
       const owner = data.nslOwner;
@@ -794,136 +983,163 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     async _getPopupContentForJira(data) {
-      /* TODO(gkalpak): Implement popup for Jira issues. */
+      const requiresTokenContent = this._checkRequiresToken(this._jiraUtils);
+      if (requiresTokenContent) return requiresTokenContent;
+
+      const number = data.nslNumber;
+
+      const info = await this._jiraUtils.getIssueInfo(number);
+
+      /* TODO(gkalpak): Implement proper popup for Jira issues. */
       return `
-        <div style="color: orange; font-size: 1.25em; text-align: center;">
-          [${data.nslNumber}] Fetching info for Jira issues is not yet supported :(
-        </div>
+        <b>Jira issue ${number}:</b>
+        <pre>${JSON.stringify(info, null, 2)}</pre>
       `;
     }
 
-    async _getToken(storageKey, name, description) {
-      const encryptedToken = this._storageUtils.inMemory.get(storageKey) ||
-        this._storageUtils.session.get(storageKey) ||
-        this._storageUtils.local.get(storageKey) ||
-        await this._promptForToken(storageKey, name, description);
-
-      if (!encryptedToken) return;
+    async _getStoredTokenFor(providerClass) {
+      const storageKey = this._KEYS.get(providerClass);
 
       try {
-        return await this._secretUtils.decrypt(encryptedToken);
+        const encryptedToken = ['inMemory', 'session', 'local'].reduce((token, store) =>
+          token || this._storageUtils[store].get(storageKey), null);
+
+        if (!encryptedToken) return;
+
+        const token = await this._whileNotDestroyed(this._secretUtils.decrypt(encryptedToken));
+        providerClass.validateToken(token);
+
+        return token;
       } catch (err) {
+        if (err === CLEANING_UP) throw err;
+
         this._storageUtils.inMemory.delete(storageKey);
         this._storageUtils.session.delete(storageKey);
         this._storageUtils.local.delete(storageKey);
 
-        throw err;
+        const warnMsg = `Found a corrupted or invalid stored ${providerClass.TOKEN_NAME} and removed it.`;
+
+        this._logUtils.error(err);
+        this._logUtils.warn(warnMsg);
+        this._uiUtils.showSnackbar(
+          `<div style="color: orange;">
+            <b>${warnMsg}</b><br />
+            <small>(See the console for more details.)</small>
+          </div>`,
+          3000);
       }
     }
 
-    async _init() {
-      const githubTokenName = 'GitHub access token';
-      const githubToken = await this._getToken(this._KEYS.githubToken, githubTokenName, `
-        <p>
-          It can be used to make authenticated requests to GitHub's API, when retrieving issue/PR info. Authenticated
-          requests have a much higher limit for requests per hour (at the time of writing 5000 vs 60 for anonymous
-          requests).
-        </p>
-        <p>Providing a ${githubTokenName} is <b>optional</b>.</p>
-      `);
-      this._ghUtils = new GithubUtils(githubToken);
-    }
+    async _promptForToken(providerClass, remainingAttempts = 2) {
+      const tokenName = providerClass.TOKEN_NAME;
+      const tokenDescription = providerClass.TOKEN_DESCRIPTION_HTML;
 
-    _promptForToken(storageKey, name, description, force = false) {
-      const allPrompts = this._storageUtils.local.get('prompts') || {};
-      const prompts = allPrompts[storageKey] || (allPrompts[storageKey] = {});
-
-      if (!force && prompts.noCheckOnStartup) return;
-
-      const ctxName = `${NAME}-ctx-${Date.now()}`;
-      const ctx = window[ctxName] = {
-        token: '',
-        storage: 'local',
-        noCheckOnStartup: !!prompts.noCheckOnStartup,
-      };
+      const ctxName = `$$${NAME}-promptForToken-ctx-${Date.now()}-${Math.random()}`;
+      const ctx = window[ctxName] = {token: '', storage: 'local'};
 
       const dialogTemplate = `
-        <h2>No ${name} detected</h2>
+        <h2>No ${tokenName} detected</h2>
         <hr />
-        <p>It seems like you have not provided a ${name}.</p>
-        <p>${description}</p>
+        <p>It seems that you have not provided a ${tokenName}.</p>
+        <p>${tokenDescription}</p>
         <hr />
         <p>Would you like to provide one now?</p>
         <p>
           <form>
-            <label style="display: block;">
-              Token:
-              <input
-                  type="password"
-                  placeholder="(required)"
-                  value="${ctx.token}"
-                  oninput="javascript:window['${ctxName}'].token = event.target.value;"
-                  />
+            <label style="cursor: default; display: block; margin-bottom: 10px;">
+              ${tokenName}:
+              <div style="align-items: center; display: flex; position: relative;">
+                <input
+                    type="password"
+                    placeholder="(required)"
+                    value="${ctx.token}"
+                    style="margin: 0;"
+                    oninput="javascript:window['${ctxName}'].token = event.target.value;"
+                    />
+                <span
+                    style="cursor: pointer; font-size: 2em; position: absolute; right: 10px;"
+                    onmousedown="javascript:event.target.previousElementSibling.type = 'text';"
+                    onmouseup="javascript:event.target.previousElementSibling.type = 'password';">
+                  👁️
+                </span>
+              </div>
             </label>
-            <label style="display: block;">
+            <label style="cursor: default; display: block; margin-bottom: 10px;">
               Store:
-              <select value="${ctx.store}" onchange="javascript:window['${ctxName}'].storage = event.target.value;">
-                <option value="local">Permanently (for this browser)</option>
-                <option value="session">Only for current session</option>
-              </select>
-            </label>
-            <label style="display: block; text-align: right;">
-              Do not ask again:
-              <input
-                  type="checkbox"
-                  style="margin-left: 15px; transform: translateX(-50%) scale(2);"
-                  ${ctx.noCheckOnStartup ? 'checked' : ''}
-                  onclick="javascript:window['${ctxName}'].noCheckOnStartup = event.target.checked"
-                  />
+              <div style="align-items: center; display: flex; position: relative;">
+                <select
+                    value="${ctx.store}"
+                    style="cursor: pointer;"
+                    onchange="javascript:window['${ctxName}'].storage = event.target.value;">
+                  <option value="local">Permanently (for this browser)</option>
+                  <option value="session">Only for current session</option>
+                </select>
+                <span style="
+                      font-size: 2em;
+                      pointer-events: none;
+                      position: absolute;
+                      right: 24px;
+                      transform: rotateZ(90deg);
+                    ">
+                  &#x276f;
+                </span>
+              </div>
             </label>
           </form>
         </p>
       `;
 
-      return this._uiUtils.
-        showDialog(dialogTemplate, 'Store token', 'Not now').
-        finally(() => delete window[ctxName]).
-        then(async ok => {
-          prompts.noCheckOnStartup = ctx.noCheckOnStartup;
-          this._storageUtils.local.set('prompts', allPrompts);
+      try {
+        const ok = await this._uiUtils.
+          showDialog(dialogTemplate, 'Store token', 'Not now').
+          finally(() => delete window[ctxName]);
 
-          if (!ok) return;
+        if (!ok) return;
 
-          const storage = this._storageUtils[ctx.storage];
-          if (!ctx.token || !storage) {
-            const warnMsg =
-              `Unable to store the ${name}: Invalid data provided (token or storage target).\n` +
-              '(Proceeding without a token.)';
+        providerClass.validateToken(ctx.token);
 
-            this._logUtils.warn(warnMsg);
-            this._uiUtils.showSnackbar(`<div style="color: orange;">${warnMsg.replace(/\n/g, '<br />')}</div>`, 5000);
+        const storageKey = this._KEYS.get(providerClass);
+        const encryptedToken = await this._whileNotDestroyed(this._secretUtils.encrypt(ctx.token));
 
-            return;
-          }
+        this._storageUtils[ctx.storage].set(storageKey, encryptedToken);
+        this._uiUtils.showSnackbar(`<b style="color: green;">Successfully stored ${tokenName}.</b>`, 3000);
 
-          const encryptedToken = await this._secretUtils.encrypt(ctx.token);
-          storage.set(storageKey, encryptedToken);
-          this._uiUtils.showSnackbar(`<b style="color: green;">Successfully stored ${name}.</b>`, 2000);
+        return encryptedToken;
+      } catch (err) {
+        if (err === CLEANING_UP) throw err;
 
-          return encryptedToken;
-        });
+        if (remainingAttempts > 0) {
+          this._onError(err);
+          return this._promptForToken(providerClass, --remainingAttempts);
+        }
+
+        const warnMsg = `Unable to acquire a valid ${tokenName}. Giving up for now :(`;
+
+        this._logUtils.error(err);
+        this._logUtils.warn(warnMsg);
+        this._uiUtils.showSnackbar(
+          `<div style="color: orange;">
+            <b>${warnMsg}</b><br />
+            <small>(See the console for more details.)</small>
+          </div>`,
+          5000);
+      }
     }
 
     _onError(err) {
-      if (err instanceof IgnoredError) return;
+      if (err === CLEANING_UP) return;
 
       this._logUtils.error(err);
       this._uiUtils.showSnackbar(
         '<pre style="background-color: white; border: none; color: red;">' +
-          `<b>${err.message || err}</b><br />` +
+          `<b>${this._uiUtils.escapeHtml(err.message || err)}</b><br />` +
           '<small>(See the console for more details.)</small>' +
         '</pre>',
         10000);
+    }
+
+    _whileNotDestroyed(promise) {
+      return Promise.race([promise, this._destroyedDeferred.promise]);
     }
   }
 
@@ -1040,22 +1256,61 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   class UiUtils {
     constructor() {
-      this._openDialogs = [];
+      this._openDialogDeferreds = [];
 
       this._popup = null;
+      this._popupAnchor = null;
       this._hidePopupTimeout = null;
       this._showPopupTimeout = null;
 
       this._snackbarContainer = this._createSnackbarContainer();
+      this._scratchpad = document.createElement('div');
+
+      const onResize = evt => this._onResizeListeners.forEach(fn => fn(evt));
+      window.addEventListener('resize', onResize);
+
+      this._onResizeCleanUp = () => {
+        window.removeEventListener('resize', onResize);
+        this._onResizeListeners = [];
+      };
+      this._onResizeListeners = [
+        () => this._openDialogDeferreds.forEach(({dialog}) => this._updateDialogSizing(dialog)),
+        () => this._popup && this._updatePopupPositioning(this._popup, this._popupAnchor),
+      ];
+
+      const that = this;
+
+      this._DialogDeferred = class DialogDeferred extends Deferred {
+        constructor(dialog) {
+          that._openDialogDeferreds.push(super());
+          this.dialog = dialog;
+          this.promise = this.promise.finally(() => {
+            that._fadeOut(dialog);
+
+            const idx = that._openDialogDeferreds.indexOf(dialog);
+            if (idx !== -1) that._openDialogDeferreds.splice(idx, 1);
+          });
+        }
+      };
     }
 
     cleanUp() {
-      this._openDialogs.reverse().forEach(dialog => this._fadeOut(dialog));
-      this._openDialogs = [];
-
-      this.hidePopup();
+      this._onResizeCleanUp();
 
       this._snackbarContainer.remove();
+      this.hidePopup();
+
+      while (this._openDialogDeferreds.length) {
+        this._openDialogDeferreds.pop().reject(CLEANING_UP);
+      }
+    }
+
+    escapeHtml(html) {
+      this._scratchpad.textContent = html;
+      const escaped = this._scratchpad.innerHTML;
+      this._scratchpad.textContent = '';
+
+      return escaped;
     }
 
     hidePopup() {
@@ -1064,6 +1319,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       if (this._popup) {
         this._fadeOut(this._popup);
         this._popup = null;
+        this._popupAnchor = null;
       }
     }
 
@@ -1084,20 +1340,13 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       return true;
     }
 
-    showDialog(html, okBtnText, cancelBtnText) {
-      const deferred = new Deferred();
-      const onClose = ok => {
-        this._fadeOut(dialog);
-        deferred.resolve(ok);
-      };
-
-      const outerPadding = 15;
+    showDialog(htmlOrNode, okBtnText, cancelBtnText) {
       const dialog = Object.assign(document.createElement('div'), {
         className: 'nsl-dialog-backdrop',
         innerHTML: `
           <div class="nsl-dialog">
             <header class="nsl-dialog-header">${NAME} v${VERSION}</header>
-            <section class="nsl-dialog-content">${html}</section>
+            <section class="nsl-dialog-content"></section>
             <footer class="nsl-dialog-actions">
               <button class="nsl-dialog-btn-ok">${okBtnText}</button>
               <button class="nsl-dialog-btn-cancel">${cancelBtnText}</button>
@@ -1110,12 +1359,12 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           bottom: 0;
           display: flex;
           justify-content: center;
-          padding: ${outerPadding}px;
+          padding: 15px;
           position: fixed;
           left: 0;
           right: 0;
           top: 0;
-          z-index: 9999;
+          z-index: 10200;
         `,
       });
 
@@ -1128,10 +1377,6 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           box-sizing: border-box;
           display: flex;
           flex-direction: column;
-          max-height: ${Math.min(window.innerHeight - (2 * outerPadding), 700)}px;
-          max-width: ${Math.min(window.innerWidth - (2 * outerPadding), 900)}px;
-          min-height: ${Math.min(window.innerHeight - (2 * outerPadding), 500)}px;
-          min-width: ${Math.min(window.innerWidth - (2 * outerPadding), 750)}px;
           overflow: auto;
           padding: 15px;
           pointer-events: all;
@@ -1144,11 +1389,13 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           text-align: right;
         `,
       });
-      Object.assign(dialog.querySelector('.nsl-dialog-content'), {
-        style: `
-          user-select: text;
-        `,
-      });
+      this._insertContent(
+        Object.assign(dialog.querySelector('.nsl-dialog-content'), {
+          style: `
+            user-select: text;
+          `,
+        }),
+        htmlOrNode);
       Object.assign(dialog.querySelector('.nsl-dialog-actions'), {
         style: `
           display: flex;
@@ -1157,7 +1404,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         `,
       });
       Object.assign(dialog.querySelector('.nsl-dialog-btn-ok'), {
-        onclick: () => onClose(true),
+        onclick: () => deferred.resolve(true),
         onmouseenter: evt => evt.target.style.borderColor = 'orange',
         onmouseleave: evt => evt.target.style.borderColor = 'white',
         style: `
@@ -1170,7 +1417,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         `,
       });
       Object.assign(dialog.querySelector('.nsl-dialog-btn-cancel'), {
-        onclick: () => onClose(false),
+        onclick: () => deferred.resolve(false),
         onmouseenter: evt => evt.target.style.borderColor = 'orange',
         onmouseleave: evt => evt.target.style.borderColor = 'white',
         style: `
@@ -1182,53 +1429,51 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         `,
       });
 
-      this._openDialogs.push(dialog);
+      const deferred = new this._DialogDeferred(dialog);
+
       document.body.appendChild(dialog);
+      this._updateDialogSizing(dialog);
       this._fadeIn(dialog);
 
       return deferred.promise;
     }
 
-    showPopup(html, evt) {
+    showPopup(htmlOrNode, evt) {
       this._cancelShowPopup();
       this.hidePopup();
 
-      const positioning = this._calculatePopupPositioning(evt);
       const onMouseenter = () => this._cancelHidePopup();
       const onMouseleave = () => this.hidePopup();
 
+      this._popupAnchor = evt.target;
       this._popup = Object.assign(document.createElement('div'), {
         className: 'nsl-popup',
-        innerHTML: html,
         onmouseenter: onMouseenter,
         onmouseleave: onMouseleave,
         style: `
           background-color: white;
           border: 1px solid gray;
           border-radius: 6px;
-          bottom: ${positioning.bottom};
           box-shadow: 0 0 0 1px rgba(0, 0, 0, .08), 0 4px 12px 0 rgba(0, 0, 0, .12);
-          left: ${positioning.left};
-          max-height: ${positioning.maxHeight};
           overflow: auto;
           padding: 10px;
           position: fixed;
-          right: ${positioning.right};
-          top: ${positioning.top};
           user-select: text;
-          z-index: 9999;
+          z-index: 10100;
         `,
       });
+      this._insertContent(this._popup, htmlOrNode);
+      this._updatePopupPositioning(this._popup, this._popupAnchor);
 
       document.body.appendChild(this._popup);
       this._fadeIn(this._popup);
     }
 
-    showSnackbar(html, duration = 2000) {
+    showSnackbar(htmlOrNode, duration = 2000) {
       const snackbar = Object.assign(document.createElement('div'), {
         className: 'nsl-snackbar',
         innerHTML: `
-          <section class="nsl-snackbar-content">${html}</section>
+          <section class="nsl-snackbar-content"></section>
           <button class="nsl-snackbar-btn-close">&#x2715;</button>
         `,
         style: `
@@ -1246,13 +1491,15 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         `,
       });
 
-      Object.assign(snackbar.querySelector('.nsl-snackbar-content'), {
-        style: `
-          overflow: auto;
-          padding: 10px 5px 10px 10px;
-          user-select: text;
-        `,
-      });
+      this._insertContent(
+        Object.assign(snackbar.querySelector('.nsl-snackbar-content'), {
+          style: `
+            overflow: auto;
+            padding: 10px 5px 10px 10px;
+            user-select: text;
+          `,
+        }),
+        htmlOrNode);
       Object.assign(snackbar.querySelector('.nsl-snackbar-btn-close'), {
         onclick: () => this._fadeOut(snackbar),
         onmouseenter: evt => evt.target.style.color = 'red',
@@ -1287,13 +1534,13 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       ]).then(() => new Promise(resolve => setTimeout(resolve, duration)));
     }
 
-    _calculatePopupPositioning(evt) {
+    _calculatePopupPositioning(anchorNode) {
       const idealWidth = 900;
       const minIdealHeight = 500;
       const maxIdealHeight = 750;
       const margin = 10;
 
-      const targetRect = evt.target.getBoundingClientRect();
+      const targetRect = anchorNode.getBoundingClientRect();
 
       const topDistance = targetRect.top;
       const bottomDistance = window.innerHeight - targetRect.bottom;
@@ -1341,10 +1588,12 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           bottom: 10px;
           display: flex;
           flex-direction: column-reverse;
+          overflow: auto;
           pointer-events: none;
           position: fixed;
           right: 10px;
-          z-index: 9999;
+          top: 10px;
+          z-index: 10300;
         `,
       });
 
@@ -1362,6 +1611,32 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         then(() => elem.remove());
     }
 
+    _insertContent(parentNode, htmlOrNode) {
+      if (typeof htmlOrNode === 'string') {
+        parentNode.innerHTML = htmlOrNode;
+      } else {
+        parentNode.innerHTML = '';
+        parentNode.appendChild(htmlOrNode);
+      }
+    }
+
+    _updateDialogSizing(dialog) {
+      const availableWidth = window.innerWidth - (2 * 15);
+      const availableHeight = window.innerHeight - (2 * 15);
+
+      Object.assign(dialog.firstElementChild.style, {
+        minWidth: `${Math.min(750, availableWidth)}px`,
+        maxWidth: `${Math.min(900, availableWidth)}px`,
+        minHeight: `${Math.min(500, availableHeight)}px`,
+        maxHeight: `${Math.min(700, availableHeight)}px`,
+      });
+    }
+
+    _updatePopupPositioning(popup, popupAnchor) {
+      const positioning = this._calculatePopupPositioning(popupAnchor);
+      Object.assign(popup.style, positioning);
+    }
+
     _withRafInterval(actions) {
       return new Promise((resolve, reject) => {
         if (!actions.length) return resolve();
@@ -1376,4 +1651,4 @@ javascript:/* eslint-disable-line no-unused-labels *//*
   /* Run */
   new Program().main();
 
-})();
+})(window, window.document);
