@@ -707,8 +707,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
         this._logUtils.log('Installing...');
 
-        this._ghUtils.setToken(await this._getTokenFor(GithubUtils));
-        this._jiraUtils.setToken(await this._getTokenFor(JiraUtils));
+        this._ghUtils.setToken(await this._getStoredTokenFor(GithubUtils));
+        this._jiraUtils.setToken(await this._getStoredTokenFor(JiraUtils));
 
         const root = document.querySelector('#client_body');
         this._linkifier.processAll([root], true);
@@ -800,7 +800,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       });
 
       Object.assign(content.querySelector('button'), {
-        onclick: () => this._getTokenFor(provider.constructor, true),
+        onclick: async () => provider.setToken(await this._promptForToken(provider.constructor)),
         onmouseenter: evt => evt.target.style.borderColor = 'orange',
         onmouseleave: evt => evt.target.style.borderColor = 'white',
         style: `
@@ -980,19 +980,18 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       `;
     }
 
-    async _getTokenFor(providerClass, force = false, remainingAttempts = 3) {
+    async _getStoredTokenFor(providerClass) {
       const storageKey = this._KEYS.get(providerClass);
 
       try {
-        const encryptedToken = this._storageUtils.inMemory.get(storageKey) ||
-          this._storageUtils.session.get(storageKey) ||
-          this._storageUtils.local.get(storageKey) ||
-          await this._whileNotDestroyed(this._promptForToken(providerClass, force));
+        const encryptedToken = ['inMemory', 'session', 'local'].reduce((token, store) =>
+          token || this._storageUtils[store].get(storageKey), null);
 
         if (!encryptedToken) return;
 
-        const token = await this._secretUtils.decrypt(encryptedToken);
+        const token = await this._whileNotDestroyed(this._secretUtils.decrypt(encryptedToken));
         providerClass.validateToken(token);
+
         return token;
       } catch (err) {
         if (err === CLEANING_UP) throw err;
@@ -1001,45 +1000,25 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         this._storageUtils.session.delete(storageKey);
         this._storageUtils.local.delete(storageKey);
 
-        if (--remainingAttempts > 0) {
-          this._onError(err);
-          return this._getTokenFor(providerClass, force, remainingAttempts);
-        } else {
-          const warnMsg = `Unable to acquire a valid ${providerClass.TOKEN_NAME}. Giving up for now :(`;
+        const warnMsg = `Found a corrupted or invalid stored ${providerClass.TOKEN_NAME} and removed it.`;
 
-          this._logUtils.error(err);
-          this._logUtils.warn(warnMsg);
-          this._uiUtils.showSnackbar(
-            `<div style="color: orange;">
-              <b>${warnMsg}</b><br />
-              <small>(See the console for more details.)</small>
-            </div>`,
-            5000);
-        }
+        this._logUtils.error(err);
+        this._logUtils.warn(warnMsg);
+        this._uiUtils.showSnackbar(
+          `<div style="color: orange;">
+            <b>${warnMsg}</b><br />
+            <small>(See the console for more details.)</small>
+          </div>`,
+          3000);
       }
     }
 
-    _promptForToken(providerClass, force = false) {
-      const storageKey = this._KEYS.get(providerClass);
-      const allPrompts = this._storageUtils.local.get('prompts') || {};
-      const prompts = allPrompts[storageKey] || (allPrompts[storageKey] = {});
-
-      if (!force && prompts.noAutoCheck) return;
-
+    async _promptForToken(providerClass, remainingAttempts = 2) {
       const tokenName = providerClass.TOKEN_NAME;
       const tokenDescription = providerClass.TOKEN_DESCRIPTION_HTML;
 
       const ctxName = `$$${NAME}-promptForToken-ctx-${Date.now()}-${Math.random()}`;
-      const ctx = window[ctxName] = {
-        token: '',
-        storage: 'local',
-        noAutoCheck: !!prompts.noAutoCheck,
-      };
-
-      const savePrefs = () => {
-        prompts.noAutoCheck = ctx.noAutoCheck;
-        this._storageUtils.local.set('prompts', allPrompts);
-      };
+      const ctx = window[ctxName] = {token: '', storage: 'local'};
 
       const dialogTemplate = `
         <h2>No ${tokenName} detected</h2>
@@ -1089,38 +1068,45 @@ javascript:/* eslint-disable-line no-unused-labels *//*
                 </span>
               </div>
             </label>
-            <label style="display: block; text-align: right;">
-              Do not ask again:
-              <input
-                  type="checkbox"
-                  style="margin-left: 15px; outline: none; transform: translateX(-50%) scale(2);"
-                  ${ctx.noAutoCheck ? 'checked' : ''}
-                  onclick="javascript:window['${ctxName}'].noAutoCheck = event.target.checked"
-                  />
-            </label>
           </form>
         </p>
       `;
 
-      return this._uiUtils.
-        showDialog(dialogTemplate, 'Store token', 'Not now').
-        finally(() => delete window[ctxName]).
-        then(async ok => {
-          if (!ok) {
-            savePrefs();
-            return;
-          }
+      try {
+        const ok = await this._uiUtils.
+          showDialog(dialogTemplate, 'Store token', 'Not now').
+          finally(() => delete window[ctxName]);
 
-          providerClass.validateToken(ctx.token);
-          const encryptedToken = await this._secretUtils.encrypt(ctx.token);
-          this._storageUtils[ctx.storage].set(storageKey, encryptedToken);
+        if (!ok) return;
 
-          savePrefs();
+        providerClass.validateToken(ctx.token);
 
-          this._uiUtils.showSnackbar(`<b style="color: green;">Successfully stored ${tokenName}.</b>`, 3000);
+        const storageKey = this._KEYS.get(providerClass);
+        const encryptedToken = await this._whileNotDestroyed(this._secretUtils.encrypt(ctx.token));
 
-          return encryptedToken;
-        });
+        this._storageUtils[ctx.storage].set(storageKey, encryptedToken);
+        this._uiUtils.showSnackbar(`<b style="color: green;">Successfully stored ${tokenName}.</b>`, 3000);
+
+        return encryptedToken;
+      } catch (err) {
+        if (err === CLEANING_UP) throw err;
+
+        if (remainingAttempts > 0) {
+          this._onError(err);
+          return this._promptForToken(providerClass, --remainingAttempts);
+        }
+
+        const warnMsg = `Unable to acquire a valid ${tokenName}. Giving up for now :(`;
+
+        this._logUtils.error(err);
+        this._logUtils.warn(warnMsg);
+        this._uiUtils.showSnackbar(
+          `<div style="color: orange;">
+            <b>${warnMsg}</b><br />
+            <small>(See the console for more details.)</small>
+          </div>`,
+          5000);
+      }
     }
 
     _onError(err) {
