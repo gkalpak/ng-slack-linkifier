@@ -1253,7 +1253,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   class UiUtils {
     constructor() {
-      this._openDialogs = [];
+      this._openDialogDeferreds = [];
 
       this._popup = null;
       this._hidePopupTimeout = null;
@@ -1261,11 +1261,26 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
       this._snackbarContainer = this._createSnackbarContainer();
       this._scratchpad = document.createElement('div');
+
+      const that = this;
+
+      this._DialogDeferred = class DialogDeferred extends Deferred {
+        constructor(dialog) {
+          that._openDialogDeferreds.push(super());
+          this.promise = this.promise.finally(() => {
+            that._fadeOut(dialog);
+
+            const idx = that._openDialogDeferreds.indexOf(dialog);
+            if (idx !== -1) that._openDialogDeferreds.splice(idx, 1);
+          });
+        }
+      };
     }
 
     cleanUp() {
-      this._openDialogs.reverse().forEach(dialog => this._fadeOut(dialog));
-      this._openDialogs = [];
+      while (this._openDialogDeferreds.length) {
+        this._openDialogDeferreds.pop().reject(CLEANING_UP);
+      }
 
       this.hidePopup();
 
@@ -1307,12 +1322,6 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     showDialog(htmlOrNode, okBtnText, cancelBtnText) {
-      const deferred = new Deferred();
-      const onClose = ok => {
-        this._fadeOut(dialog);
-        deferred.resolve(ok);
-      };
-
       const outerPadding = 15;
       const dialog = Object.assign(document.createElement('div'), {
         className: 'nsl-dialog-backdrop',
@@ -1381,7 +1390,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         `,
       });
       Object.assign(dialog.querySelector('.nsl-dialog-btn-ok'), {
-        onclick: () => onClose(true),
+        onclick: () => deferred.resolve(true),
         onmouseenter: evt => evt.target.style.borderColor = 'orange',
         onmouseleave: evt => evt.target.style.borderColor = 'white',
         style: `
@@ -1394,7 +1403,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         `,
       });
       Object.assign(dialog.querySelector('.nsl-dialog-btn-cancel'), {
-        onclick: () => onClose(false),
+        onclick: () => deferred.resolve(false),
         onmouseenter: evt => evt.target.style.borderColor = 'orange',
         onmouseleave: evt => evt.target.style.borderColor = 'white',
         style: `
@@ -1406,7 +1415,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         `,
       });
 
-      this._openDialogs.push(dialog);
+      const deferred = new this._DialogDeferred(dialog);
+
       document.body.appendChild(dialog);
       this._fadeIn(dialog);
 
