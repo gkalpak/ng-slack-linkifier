@@ -105,6 +105,13 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
     _generateHeaders(token) { this._notImplemented(token); }
 
+    _getErrorConstructorExtending(BaseConstructor) {
+      const provider = this;
+      return class extends BaseConstructor {
+        get provider() { return provider; }
+      };
+    }
+
     _getErrorForResponse(res) { this._notImplemented(res); }
 
     _getFromCache(url) {
@@ -124,7 +131,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       let response = this._getFromCache(url);
 
       if (!response) {
-        response = window.fetch(url, {headers: this._headers}).
+        response = window.fetch(url, {headers: {Accept: 'application/json', ...this._headers}}).
           then(async res => res.ok ? res.json() : Promise.reject(await this._getErrorForResponse(res))).
           catch(err => {
             if (this._getFromCache(url) === response) this._cache.delete(url);
@@ -138,6 +145,15 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     _notImplemented() { throw new Error('Not implemented.'); }
+
+    _wrapError(err, message) {
+      const ErrorConstructor = (err instanceof Error) ? err.constructor : Error;
+      return new ErrorConstructor(`${message}\n${err.message || err}`);
+    }
+  }
+
+  class AbstractInvalidTokenError extends Error {
+    get provider() { throw new Error('Not implemented.'); }
   }
 
   class Deferred {
@@ -188,7 +204,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           files: data.files.map(f => this._extractFileInfo(f)),
         })).
         catch(err => {
-          throw new Error(`Error getting GitHub info for ${owner}/${repo}@${commit}:\n${err.message || err}`);
+          throw this._wrapError(err, `Error getting GitHub info for ${owner}/${repo}@${commit}:`);
         });
     }
 
@@ -205,7 +221,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           isPr: data.html_url.endsWith(`/pull/${data.number}`),
         })).
         catch(err => {
-          throw new Error(`Error getting GitHub info for ${owner}/${repo}#${number}:\n${err.message || err}`);
+          throw this._wrapError(err, `Error getting GitHub info for ${owner}/${repo}#${number}:`);
         });
     }
 
@@ -241,21 +257,28 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     async _getErrorForResponse(res) {
-      const headers = res.headers;
+      let ErrorConstructor = Error;
       let data = await res.json();
 
       if (!data.message) data = {message: JSON.stringify(data)};
 
-      if ((res.status === 403) && (headers.get('X-RateLimit-Remaining') == '0')) {
-        const limit = headers.get('X-RateLimit-Limit');
-        const reset = new Date(headers.get('X-RateLimit-Reset') * 1000);
+      switch (res.status) {
+        case 401:
+          if (this._headers) ErrorConstructor = this._getErrorConstructorExtending(AbstractInvalidTokenError);
+          break;
+        case 403:
+          if (res.headers.get('X-RateLimit-Remaining') === '0') {
+            const limit = res.headers.get('X-RateLimit-Limit');
+            const reset = new Date(res.headers.get('X-RateLimit-Reset') * 1000);
 
-        this._rateLimitResetTime = reset.getTime();
+            this._rateLimitResetTime = reset.getTime();
 
-        data.message = `0/${limit} API requests remaining until ${reset.toLocaleString()}.\n${data.message}`;
+            data.message = `0/${limit} API requests remaining until ${reset.toLocaleString()}.\n${data.message}`;
+          }
+          break;
       }
 
-      return new Error(`${res.status} (${res.statusText}) - ${data.message}`);
+      return new ErrorConstructor(`${res.status} (${res.statusText}) - ${data.message}`);
     }
   }
 
@@ -366,7 +389,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       const url = `${this._baseUrl}/issue/${number}`;
       return this._getJson(url).
         then(data => ({...data})).
-        catch(err => { throw new Error(`Error getting Jira info for ${number}:\n${err.message || err}`); });
+        catch(err => { throw this._wrapError(err, `Error getting Jira info for ${number}:`); });
     }
 
     requiresToken() {
@@ -1125,6 +1148,16 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
     _onError(err) {
       if (err === CLEANING_UP) return;
+
+      if (err instanceof AbstractInvalidTokenError) {
+        const provider = err.provider;
+        const providerClass = provider.constructor;
+        const storageKey = this._KEYS.get(providerClass);
+
+        provider.setToken(null);
+        this._storageUtils.delete(storageKey);
+        this._logUtils.warn(`Removed invalid ${providerClass.TOKEN_NAME}.`);
+      }
 
       this._logUtils.error(err);
       this._uiUtils.showSnackbar(

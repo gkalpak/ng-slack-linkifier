@@ -72,8 +72,6 @@ This comment is a good starting point for manual testing:
 
 Things I want to (but won't necessarily) do:
 
-- Remove stored Github access token on `401 - Bad credentials`.
-  What is the equivalent for Jira.
 - Show proper popup for Jira issues.
 - Handle the fact that Jira info cannot be retrieved with use of [cors-anywhere](https://cors-anywhere.herokuapp.com/).
   - Option 1: White-list `https://angular-team.slack.com` (ref: https://confluence.atlassian.com/adminjiraserver071/configuring-the-whitelist-802593145.html).
