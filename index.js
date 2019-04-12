@@ -1018,8 +1018,16 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
       /* TODO(gkalpak): Implement proper popup for Jira issues. */
       return `
-        <b>Jira issue ${number}:</b>
-        <pre>${JSON.stringify(info, null, 2)}</pre>
+        <p><b>Jira issue ${number}:</b></p>
+        <p style="color: orange;">
+          Info popups for Jira issues are still under construction.<br />
+          In the meantime, here is the raw API response in JSON format.<br />
+          <br />
+          Good luck :P
+        </p>
+        <pre style="white-space: pre; width: fit-content;">
+          ${JSON.stringify(info, null, 2)}
+        </pre>
       `;
     }
 
