@@ -1162,10 +1162,13 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         this._logUtils.warn(`Removed invalid ${providerClass.TOKEN_NAME}.`);
       }
 
+      const errorMsg = `${err.message || err}`;
+      const truncatedErrorMsg = (errorMsg.length > 250) ? `${errorMsg.slice(0, 250)}...` : errorMsg;
+
       this._logUtils.error(err);
       this._uiUtils.showSnackbar(
         '<pre style="background-color: white; border: none; color: red;">' +
-          `<b>${this._uiUtils.escapeHtml(err.message || err)}</b><br />` +
+          `<b>${this._uiUtils.escapeHtml(truncatedErrorMsg)}</b><br />` +
           '<small>(See the console for more details.)</small>' +
         '</pre>',
         10000);
