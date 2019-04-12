@@ -1029,7 +1029,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       const tokenName = providerClass.TOKEN_NAME;
       const tokenDescription = providerClass.TOKEN_DESCRIPTION_HTML;
 
-      const ctxName = `${NAME}-ctx-${Date.now()}`;
+      const ctxName = `$$${NAME}-promptForToken-ctx-${Date.now()}-${Math.random()}`;
       const ctx = window[ctxName] = {
         token: '',
         storage: 'local',
