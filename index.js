@@ -1001,8 +1001,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       const storageKey = this._KEYS.get(providerClass);
 
       try {
-        const encryptedToken = ['inMemory', 'session', 'local'].reduce((token, store) =>
-          token || this._storageUtils[store].get(storageKey), null);
+        const encryptedToken = this._storageUtils.get(storageKey);
 
         if (!encryptedToken) return;
 
@@ -1013,9 +1012,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       } catch (err) {
         if (err === CLEANING_UP) throw err;
 
-        this._storageUtils.inMemory.delete(storageKey);
-        this._storageUtils.session.delete(storageKey);
-        this._storageUtils.local.delete(storageKey);
+        this._storageUtils.delete(storageKey);
 
         const warnMsg = `Found a corrupted or invalid stored ${providerClass.TOKEN_NAME} and removed it.`;
 
@@ -1251,6 +1248,32 @@ javascript:/* eslint-disable-line no-unused-labels *//*
        * They are managed by the browser.
        */
       this.inMemory.clear();
+    }
+
+    clear() {
+      this.local.clear();
+      this.session.clear();
+      this.inMemory.clear();
+    }
+
+    delete(key) {
+      this.local.delete(key);
+      this.session.delete(key);
+      this.inMemory.delete(key);
+    }
+
+    get(key) {
+      const storage = this.has(key);
+      return storage ? storage.get(key) : undefined;
+    }
+
+    has(key) {
+      /* The order of precedence is: `inMemory` > `session` > `local` */
+      return this.inMemory.has(key) ?
+        this.inMemory : this.session.has(key) ?
+          this.session : this.local.has(key) ?
+            this.local :
+            false;
     }
   }
 
