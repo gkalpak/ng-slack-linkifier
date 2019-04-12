@@ -74,11 +74,13 @@ Things I want to (but won't necessarily) do:
 
 - Remove stored Github access token on `401 - Bad credentials`.
   What is the equivalent for Jira.
-- Show info for Jira issues.
-  - Add option for enabling use of `cors-anywhere` (store in storage).
-  - Show proper popup.
+- Show proper popup for Jira issues.
+- Handle the fact that Jira info cannot be retrieved with use of [cors-anywhere](https://cors-anywhere.herokuapp.com/).
+  - Option 1: White-list `https://angular-team.slack.com` (ref: https://confluence.atlassian.com/adminjiraserver071/configuring-the-whitelist-802593145.html).
+  - Option 2: Roll our own version of `cors-anywhere`.
 
 - Try out `DomUtils` and see if size/ergonomics improve.
+  - Consider having a "library" of re-usable components and/or templates (e.g. button, text-field, etc.).
 - Show more info for PRs (e.g. first try `.../pulls/<number>` and if it fails then `.../issues/<number>`?
 - Add support for removing/resetting tokens via the UI. (How?)
 - Recognize, shorten and show info for more GitHub URLs.

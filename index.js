@@ -307,6 +307,9 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     static get TOKEN_DESCRIPTION_HTML() {
       const tokenName = this.TOKEN_NAME;
       const tokenUrl = 'https://id.atlassian.com/manage/api-tokens';
+      const corsAnywhereLink =
+        '<a href="https://cors-anywhere.herokuapp.com/" target="_blank">https://cors-anywhere.herokuapp.com/</a>';
+
       return `
         <p>
           A ${tokenName} is required in order to retrieve info for links to Jira issues. Unauthenticated requests are
@@ -314,6 +317,20 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         </p>
         <p>To create a Jira access token visit: <a href="${tokenUrl}" target="_blank">${tokenUrl}</a></p>
         <p>Providing a ${tokenName} is <b>optional</b> (unless you want to see issue info in here).</p>
+        <br />
+        <p style="
+              background-color: rgba(255, 0, 0, 0.1);
+              border: 2px solid gray;
+              border-radius: 6px;
+              color: red;
+              padding: 7px;
+            ">
+          <b>WARNING:</b><br />
+          Currently, all requests to Jira's API are sent through ${corsAnywhereLink} in order to work around CORS
+          restrictions. There will, hopefully, be a better solution in the future, but for now <b>do not</b> provide a
+          ${tokenName}, unless you understand and feel comfortable with the implications of sending the requests
+          (including your encoded ${tokenName}) through ${corsAnywhereLink}.
+        </p>
         <br />
         <p>
           <b>IMPORTANT:</b><br />
@@ -338,11 +355,11 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       super();
       this._baseUrl = 'https://angular-team.atlassian.net/rest/api/3';
 
-      /* Prepend `https://cors-anywhere.herokuapp.com/` to the URL to work around CORS limitation. */
-      const corsAnywhereUrl = 'https://cors-anywhere.herokuapp.com';
-      this._baseUrl = `${corsAnywhereUrl}/${this._baseUrl}`;
-      window.alert(
-        `[JiraUtils]\n\nUsing '${corsAnywhereUrl}' to get info from Jira during development.\nDisable for production.`);
+      /*
+       * Prepend `https://cors-anywhere.herokuapp.com/` to the URL to work around CORS restrictions.
+       * TODO(gkalpak): Implement a more secure alternative.
+       */
+      this._baseUrl = `https://cors-anywhere.herokuapp.com/${this._baseUrl}`;
     }
 
     getIssueInfo(number) {
