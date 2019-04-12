@@ -1126,7 +1126,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         this._storageUtils[ctx.storage].set(storageKey, encryptedToken);
         this._uiUtils.showSnackbar(`<b style="color: green;">Successfully stored ${tokenName}.</b>`, 3000);
 
-        return encryptedToken;
+        return ctx.token;
       } catch (err) {
         if (err instanceof CleaningUpMarkerError) throw err;
 
