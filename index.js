@@ -1242,17 +1242,31 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       this._openDialogDeferreds = [];
 
       this._popup = null;
+      this._popupAnchor = null;
       this._hidePopupTimeout = null;
       this._showPopupTimeout = null;
 
       this._snackbarContainer = this._createSnackbarContainer();
       this._scratchpad = document.createElement('div');
 
+      const onResize = evt => this._onResizeListeners.forEach(fn => fn(evt));
+      window.addEventListener('resize', onResize);
+
+      this._onResizeCleanUp = () => {
+        window.removeEventListener('resize', onResize);
+        this._onResizeListeners = [];
+      };
+      this._onResizeListeners = [
+        () => this._openDialogDeferreds.forEach(({dialog}) => this._updateDialogSizing(dialog)),
+        () => this._popup && this._updatePopupPositioning(this._popup, this._popupAnchor),
+      ];
+
       const that = this;
 
       this._DialogDeferred = class DialogDeferred extends Deferred {
         constructor(dialog) {
           that._openDialogDeferreds.push(super());
+          this.dialog = dialog;
           this.promise = this.promise.finally(() => {
             that._fadeOut(dialog);
 
@@ -1264,13 +1278,14 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     cleanUp() {
+      this._onResizeCleanUp();
+
+      this._snackbarContainer.remove();
+      this.hidePopup();
+
       while (this._openDialogDeferreds.length) {
         this._openDialogDeferreds.pop().reject(CLEANING_UP);
       }
-
-      this.hidePopup();
-
-      this._snackbarContainer.remove();
     }
 
     escapeHtml(html) {
@@ -1287,6 +1302,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       if (this._popup) {
         this._fadeOut(this._popup);
         this._popup = null;
+        this._popupAnchor = null;
       }
     }
 
@@ -1308,7 +1324,6 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     showDialog(htmlOrNode, okBtnText, cancelBtnText) {
-      const outerPadding = 15;
       const dialog = Object.assign(document.createElement('div'), {
         className: 'nsl-dialog-backdrop',
         innerHTML: `
@@ -1327,7 +1342,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           bottom: 0;
           display: flex;
           justify-content: center;
-          padding: ${outerPadding}px;
+          padding: 15px;
           position: fixed;
           left: 0;
           right: 0;
@@ -1345,10 +1360,6 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           box-sizing: border-box;
           display: flex;
           flex-direction: column;
-          max-height: ${Math.min(window.innerHeight - (2 * outerPadding), 700)}px;
-          max-width: ${Math.min(window.innerWidth - (2 * outerPadding), 900)}px;
-          min-height: ${Math.min(window.innerHeight - (2 * outerPadding), 500)}px;
-          min-width: ${Math.min(window.innerWidth - (2 * outerPadding), 750)}px;
           overflow: auto;
           padding: 15px;
           pointer-events: all;
@@ -1404,6 +1415,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       const deferred = new this._DialogDeferred(dialog);
 
       document.body.appendChild(dialog);
+      this._updateDialogSizing(dialog);
       this._fadeIn(dialog);
 
       return deferred.promise;
@@ -1413,10 +1425,10 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       this._cancelShowPopup();
       this.hidePopup();
 
-      const positioning = this._calculatePopupPositioning(evt);
       const onMouseenter = () => this._cancelHidePopup();
       const onMouseleave = () => this.hidePopup();
 
+      this._popupAnchor = evt.target;
       this._popup = Object.assign(document.createElement('div'), {
         className: 'nsl-popup',
         onmouseenter: onMouseenter,
@@ -1425,20 +1437,16 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           background-color: white;
           border: 1px solid gray;
           border-radius: 6px;
-          bottom: ${positioning.bottom};
           box-shadow: 0 0 0 1px rgba(0, 0, 0, .08), 0 4px 12px 0 rgba(0, 0, 0, .12);
-          left: ${positioning.left};
-          max-height: ${positioning.maxHeight};
           overflow: auto;
           padding: 10px;
           position: fixed;
-          right: ${positioning.right};
-          top: ${positioning.top};
           user-select: text;
           z-index: 10100;
         `,
       });
       this._insertContent(this._popup, htmlOrNode);
+      this._updatePopupPositioning(this._popup, this._popupAnchor);
 
       document.body.appendChild(this._popup);
       this._fadeIn(this._popup);
@@ -1509,13 +1517,13 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       ]).then(() => new Promise(resolve => setTimeout(resolve, duration)));
     }
 
-    _calculatePopupPositioning(evt) {
+    _calculatePopupPositioning(anchorNode) {
       const idealWidth = 900;
       const minIdealHeight = 500;
       const maxIdealHeight = 750;
       const margin = 10;
 
-      const targetRect = evt.target.getBoundingClientRect();
+      const targetRect = anchorNode.getBoundingClientRect();
 
       const topDistance = targetRect.top;
       const bottomDistance = window.innerHeight - targetRect.bottom;
@@ -1593,6 +1601,23 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         parentNode.innerHTML = '';
         parentNode.appendChild(htmlOrNode);
       }
+    }
+
+    _updateDialogSizing(dialog) {
+      const availableWidth = window.innerWidth - (2 * 15);
+      const availableHeight = window.innerHeight - (2 * 15);
+
+      Object.assign(dialog.firstElementChild.style, {
+        minWidth: `${Math.min(750, availableWidth)}px`,
+        maxWidth: `${Math.min(900, availableWidth)}px`,
+        minHeight: `${Math.min(500, availableHeight)}px`,
+        maxHeight: `${Math.min(700, availableHeight)}px`,
+      });
+    }
+
+    _updatePopupPositioning(popup, popupAnchor) {
+      const positioning = this._calculatePopupPositioning(popupAnchor);
+      Object.assign(popup.style, positioning);
     }
 
     _withRafInterval(actions) {
