@@ -1372,6 +1372,17 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       }
     }
 
+    copyToClipboard(text) {
+      const textarea = document.createElement('textarea');
+      document.body.appendChild(textarea);
+      textarea.textContent = text;
+      textarea.select();
+      const success = document.execCommand('copy');
+      document.body.removeChild(textarea);
+
+      if (!success) throw new Error('Copying to clipboard failed.');
+    }
+
     escapeHtml(html) {
       this._scratchpad.textContent = html;
       const escaped = this._scratchpad.innerHTML;
