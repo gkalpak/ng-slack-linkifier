@@ -693,9 +693,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       this._prefix = `[${prefix}]`;
     }
 
-    cleanUp() {
-      /* Nothing to clean up. */
-    }
+    cleanUp() { /* Nothing to clean up. */ }
 
     log(...args) {
       console.log(this._prefix, ...args);
@@ -1208,9 +1206,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       this._ready = this._init();
     }
 
-    cleanUp() {
-      /* Nothing to clean up. */
-    }
+    cleanUp() { /* Nothing to clean up. */ }
 
     async decrypt(encrypted) {
       await this._ready;
@@ -1724,6 +1720,66 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         window.requestAnimationFrame(() =>
           this._withRafInterval(actions).then(resolve, reject));
       });
+    }
+  }
+
+  class UpdateUtils {
+    constructor(ghUtils) {
+      this._owner = 'gkalpak';
+      this._repo = 'ng-slack-linkifier';
+      this._versionRe = /^\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?$/;
+
+      this._ghUtils = ghUtils;
+    }
+
+    async checkForUpdate(currentVersion) {
+      /*
+       * Do not prompt for updates, if the current version is not available (e.g. during development).
+       * (Do not use the version placeholder string directly to avoid having it replaced at build time.)
+       */
+      if (/^X\.Y\.Z-VERSION$/.test(currentVersion)) return;
+      if (!this._versionRe.test(currentVersion)) {
+        throw new Error(`Invalid current version format: ${currentVersion} (expected: X.Y.Z[-(alpha|beta|rc).K])`);
+      }
+
+      const latestVersion = await this._getLatestVersion();
+      const latestVersionUrl = latestVersion && this._getDownloadUrl(latestVersion);
+      const needsUpdate = latestVersion && (this._compareVersions(currentVersion, latestVersion) === -1);
+
+      return needsUpdate && {
+        version: latestVersion,
+        url: latestVersionUrl,
+        code: await window.fetch(latestVersionUrl).then(res => res.text()),
+      };
+    }
+
+    cleanUp() { /* Nothing to clean up. */ }
+
+    _compareVersions(v1, v2) {
+      const a1 = v1.split(/[.-]/);
+      const a2 = v2.split(/[.-]/);
+
+      for (let i = 0, ii = a1.length; i < ii; ++i) {
+        if (a2.length === i) return -1;
+
+        const p1 = isNaN(a1[i]) ? a1[i] : Number(a1[i]);
+        const p2 = isNaN(a2[i]) ? a2[i] : Number(a2[i]);
+
+        if (p1 < p2) return -1;
+        if (p1 > p2) return 1;
+      }
+
+      return (a1.length < a2.length) ? 1 : 0;
+    }
+
+    _getDownloadUrl(version) {
+      return `https://cdn.jsdelivr.net/gh/${this._owner}/${this._repo}@${version}/dist/index.min.js`;
+    }
+
+    async _getLatestVersion() {
+      const tag = await this._ghUtils.getLatestTag(this._owner, this._repo);
+      const version = tag && tag.name.slice(1);
+      return (version && this._versionRe.test(version)) ? version : undefined;
     }
   }
 
