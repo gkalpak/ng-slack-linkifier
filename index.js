@@ -725,6 +725,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
         this._ghUtils = new GithubUtils(),
         this._jiraUtils = new JiraUtils(),
+
+        this._updateUtils = new UpdateUtils(this._ghUtils),
       ];
 
       this._cleanUpFns = [
@@ -764,6 +766,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         this._linkifier.observe(root);
 
         this._logUtils.log('Installed.');
+
+        this._checkForUpdate();
       } catch (err) {
         this._onError(err);
       }
@@ -832,6 +836,58 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       this._cleanUpFns.push(
         () => link.removeEventListener('mouseenter', onMouseenter),
         () => link.removeEventListener('mouseleave', onMouseleave));
+    }
+
+    async _checkForUpdate() {
+      try {
+        this._logUtils.log('Checking for updates...');
+
+        const update = await this._updateUtils.checkForUpdate(VERSION);
+
+        if (!update) {
+          this._logUtils.log('No updates available.');
+          this._schedule(() => this._checkForUpdate(), 1000 * 60 * 60 * 24 * 2);
+          return;
+        }
+
+        this._logUtils.log(`Update available: ${update.version} (${update.url})`);
+
+        const color = 'cornflowerblue';
+        const snackbarContent = Object.assign(document.createElement('div'), {
+          innerHTML: `
+            <header style="font-size: 0.75em; opacity: 0.5;"><p>${NAME} v${VERSION}</p></header>
+            <section style="color: ${color};">
+              <p><b>New version of ${NAME} available: v${update.version}</b></p>
+              <p>
+                <a class="nsl-update-btn-open" href="${update.url}" target="_blank">See the code</a> or
+                <a class="nsl-update-btn-copy" href="">copy it to clipboard</a>.
+              </p>
+            </section>
+          `,
+        });
+        this._uiUtils.widgetUtils.asButtonLink(snackbarContent.querySelector('.nsl-update-btn-open'));
+        this._uiUtils.widgetUtils.asButtonLink(
+          this._uiUtils.widgetUtils.withListeners(snackbarContent.querySelector('.nsl-update-btn-copy'), {
+            click: () => {
+              try {
+                this._uiUtils.copyToClipboard(update.code);
+                this._uiUtils.showSnackbar(`
+                  <div style="color: green;">
+                    <p><b>Code for v${update.version} successfully copied to clipboard.</b></p>
+                    <small>(Hopefully you know what to do 🙂)</small>
+                  </div>
+                `, 5000);
+              } catch (err) {
+                this._onError(err);
+              }
+            },
+          }));
+
+        this._uiUtils.showSnackbar(snackbarContent, -1);
+      } catch (err) {
+        /* Checking for updates is not critical operations. Just log the error and move on. */
+        this._logUtils.warn(`Error while checking for updates: ${err.message || err}`);
+      }
     }
 
     _checkRequiresToken(provider) {
@@ -1176,6 +1232,19 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           '<small>(See the console for more details.)</small>' +
         '</pre>',
         10000);
+    }
+
+    _schedule(fn, delay) {
+      const cleanUpFn = () => clearTimeout(timeoutId);
+      const callback = () => {
+        const idx = this._cleanUpFns.indexOf(cleanUpFn);
+        if (idx !== -1) this._cleanUpFns.splice(idx, 1);
+
+        fn();
+      };
+
+      const timeoutId = setTimeout(callback, delay);
+      this._cleanUpFns.push(cleanUpFn);
     }
 
     _whileNotDestroyed(promise) {
