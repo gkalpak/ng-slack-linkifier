@@ -847,18 +847,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           <div><button>Provide token now</button></div>
         `,
       });
-
-      Object.assign(content.querySelector('button'), {
-        onclick: async () => provider.setToken(await this._promptForToken(provider.constructor)),
-        onmouseenter: evt => evt.target.style.borderColor = 'orange',
-        onmouseleave: evt => evt.target.style.borderColor = 'white',
-        style: `
-          background-color: cornflowerblue;
-          border: 2px solid white;
-          border-radius: 6px;
-          color: white;
-          padding: 10px 15px;
-        `,
+      this._uiUtils.widgetUtils.asButton(content.querySelector('button'), 'cornflowerblue', {
+        click: async () => provider.setToken(await this._promptForToken(provider.constructor)),
       });
 
       return content;
@@ -1330,6 +1320,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   class UiUtils {
     constructor() {
+      this.widgetUtils = new WidgetUtils();
+
       this._openDialogDeferreds = [];
 
       this._popup = null;
@@ -1478,30 +1470,12 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           user-select: text;
         `,
       });
-      Object.assign(dialog.querySelector('.nsl-dialog-btn-ok'), {
-        onclick: () => deferred.resolve(true),
-        onmouseenter: evt => evt.target.style.borderColor = 'orange',
-        onmouseleave: evt => evt.target.style.borderColor = 'white',
-        style: `
-          background-color: green;
-          border: 2px solid white;
-          border-radius: 6px;
-          color: white;
-          margin-right: 15px;
-          padding: 10px 15px;
-        `,
-      });
-      Object.assign(dialog.querySelector('.nsl-dialog-btn-cancel'), {
-        onclick: () => deferred.resolve(false),
-        onmouseenter: evt => evt.target.style.borderColor = 'orange',
-        onmouseleave: evt => evt.target.style.borderColor = 'white',
-        style: `
-          background-color: gray;
-          border: 2px solid white;
-          border-radius: 6px;
-          color: white;
-          padding: 10px 15px;
-        `,
+      this.widgetUtils.asButton(
+        this.widgetUtils.withStyles(dialog.querySelector('.nsl-dialog-btn-ok'), {marginRight: '15px'}), 'green', {
+          click: () => deferred.resolve(true),
+        });
+      this.widgetUtils.asButton(dialog.querySelector('.nsl-dialog-btn-cancel'), 'gray', {
+        click: () => deferred.resolve(false),
       });
 
       const deferred = new this._DialogDeferred(dialog);
@@ -1780,6 +1754,47 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       const tag = await this._ghUtils.getLatestTag(this._owner, this._repo);
       const version = tag && tag.name.slice(1);
       return (version && this._versionRe.test(version)) ? version : undefined;
+    }
+  }
+
+  class WidgetUtils {
+    asButton(node, color, listeners = {}) {
+      this.withListeners(this.withListeners(node, listeners), {
+        mouseenter: evt => evt.target.style.borderColor = 'orange',
+        mouseleave: evt => evt.target.style.borderColor = 'white',
+      });
+
+      return this.withStyles(node, {
+        backgroundColor: color,
+        border: '2px solid white',
+        borderRadius: '6px',
+        color: 'white',
+        padding: '10px 15px',
+      });
+    }
+
+    asButtonLink(node, listeners = {}) {
+      this.withListeners(this.withListeners(node, listeners), {
+        mouseenter: evt => evt.target.style.color = 'orange',
+        mouseleave: evt => evt.target.style.color = null,
+      });
+
+      return this.withStyles(node, {textDecoration: 'underline'});
+    }
+
+    withListeners(node, listenersObj) {
+      Object.keys(listenersObj).forEach(event => {
+        const listener = (typeof listenersObj[event] === 'string') ?
+          new Function('event', listenersObj[event]) :
+          listenersObj[event];
+        node.addEventListener(event, listener);
+      });
+      return node;
+    }
+
+    withStyles(node, stylesObj) {
+      Object.assign(node.style, stylesObj);
+      return node;
     }
   }
 
