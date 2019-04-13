@@ -227,6 +227,14 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         });
     }
 
+    getLatestTag(owner, repo) {
+      /* Tags are listed in reverse order. */
+      const url = `${this._baseUrl}/${owner}/${repo}/tags?per_page=1`;
+      return this._getJson(url).
+        then(data => data[0]).
+        catch(err => { throw this._wrapError(err, `Error getting latest GitHub tag ${owner}/${repo}:`); });
+    }
+
     requiresToken() {
       return (this._rateLimitResetTime > Date.now()) ?
         `Anonymous rate-limit reached (until ${new Date(this._rateLimitResetTime).toLocaleString()})` :
