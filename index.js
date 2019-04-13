@@ -1171,7 +1171,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
       this._logUtils.error(err);
       this._uiUtils.showSnackbar(
-        '<pre style="background-color: white; border: none; color: red;">' +
+        '<pre style="background-color: white; border: none; color: red; margin: 0;">' +
           `<b>${this._uiUtils.escapeHtml(truncatedErrorMsg)}</b><br />` +
           '<small>(See the console for more details.)</small>' +
         '</pre>',
