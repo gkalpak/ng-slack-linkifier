@@ -456,12 +456,20 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     async _getErrorForResponse(res) {
-      const isJson = res.headers.get('Content-Type').includes('application/json');
-      let data = isJson ? await res.json() : (await res.text()).trim();
+      let ErrorConstructor = Error;
+      let data = res.headers.get('Content-Type').includes('application/json') ?
+        await res.json() :
+        (await res.text()).trim();
 
       if (!data.message) data = {message: JSON.stringify(data)};
 
-      return new Error(`${res.status} (${res.statusText}) - ${data.message}`);
+      switch (res.status) {
+        case 401:
+          if (this._headers) ErrorConstructor = this._getErrorConstructorExtending(AbstractInvalidTokenError);
+          break;
+      }
+
+      return new ErrorConstructor(`${res.status} (${res.statusText}) - ${data.message}`);
     }
 
     _sortIssueLinks(l1, l2) {
