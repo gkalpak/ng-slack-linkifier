@@ -87,6 +87,15 @@ Things I want to (but won't necessarily) do:
   - More commit URLs (e.g. `#diff...`?).
   - File URLs (e.g. https://github.com/angular/angular/blob/84be7c52d/path/to/file.ext#L13-L37).
   - Jason's `https://git.io/fjLYY/12345` shortened URLs.
+- Consider auto-update functionality (to make updates seemless). E.g. implementation:
+  - Store `index.js` as a non-bookmarklet script.
+  - Have a separate bookmarklet file, which:
+    - Checks for code stored code (e.g. in `IndexedDB`).
+      - If available, loads and runs it.
+      - If not avilable, looks up the latest tag on GitHub, downloads the corresponding version from jsDelivr, stores it
+        (e.g. in `IndexeddB`) and runs it.
+      - Potentially, include a version of the code in the bookmarklet file as fallback.
+    - When an update is available: Download from jsDelivr, store for future access (e.g. in `IndexedDB`) and run it.
 
 - Add tests.
 - Add CI support.

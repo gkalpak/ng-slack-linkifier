@@ -903,13 +903,10 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       try {
         this._logUtils.log('Checking for updates...');
 
+        this._schedule(() => this._checkForUpdate(), 1000 * 60 * 60 * 24 * 2);
         const update = await this._updateUtils.checkForUpdate(VERSION);
 
-        if (!update) {
-          this._logUtils.log('No updates available.');
-          this._schedule(() => this._checkForUpdate(), 1000 * 60 * 60 * 24 * 2);
-          return;
-        }
+        if (!update) return this._logUtils.log('No updates available.');
 
         this._logUtils.log(`Update available: ${update.version} (${update.url})`);
 
@@ -946,7 +943,10 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
         this._uiUtils.showSnackbar(snackbarContent, -1);
       } catch (err) {
-        /* Checking for updates is not critical operations. Just log the error and move on. */
+        /*
+         * Checking for updates is not a critical operation.
+         * Just log the error and move on (hoping the error is temporary).
+         */
         this._logUtils.warn(`Error while checking for updates: ${err.message || err}`);
       }
     }
