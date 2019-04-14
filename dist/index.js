@@ -1,5 +1,5 @@
 javascript:/* eslint-disable-line no-unused-labels *//*
- * # NgSlackLinkifier v0.3.0
+ * # NgSlackLinkifier v0.3.1
  *
  * ## What it does
  *
@@ -58,7 +58,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   /* Constants */
   const NAME = 'NgSlackLinkifier';
-  const VERSION = '0.3.0';
+  const VERSION = '0.3.1';
 
   const CLASS_GITHUB_COMMIT_LINK = 'nsl-github-commit';
   const CLASS_GITHUB_ISSUE_LINK = 'nsl-github-issue';
@@ -270,9 +270,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
     async _getErrorForResponse(res) {
       let ErrorConstructor = Error;
-      let data = await res.json();
-
-      if (!data.message) data = {message: JSON.stringify(data)};
+      const data = await res.json();
+      let message = data.message || JSON.stringify(data);
 
       switch (res.status) {
         case 401:
@@ -285,12 +284,12 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
             this._rateLimitResetTime = reset.getTime();
 
-            data.message = `0/${limit} API requests remaining until ${reset.toLocaleString()}.\n${data.message}`;
+            message = `0/${limit} API requests remaining until ${reset.toLocaleString()}.\n${message}`;
           }
           break;
       }
 
-      return new ErrorConstructor(`${res.status} (${res.statusText}) - ${data.message}`);
+      return new ErrorConstructor(`${res.status} (${res.statusText}) - ${message}`);
     }
   }
 
@@ -455,11 +454,13 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
     async _getErrorForResponse(res) {
       let ErrorConstructor = Error;
-      let data = res.headers.get('Content-Type').includes('application/json') ?
+      const data = res.headers.get('Content-Type').includes('application/json') ?
         await res.json() :
         (await res.text()).trim();
-
-      if (!data.message) data = {message: JSON.stringify(data)};
+      const message = !Array.isArray(data.errorMessages) ?
+        JSON.stringify(data) : (data.errorMessages.length === 1) ?
+          data.errorMessages[0] :
+          ['Errors:', ...data.errorMessages.map(e => `  - ${e}`)].join('\n');
 
       switch (res.status) {
         case 401:
@@ -467,7 +468,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           break;
       }
 
-      return new ErrorConstructor(`${res.status} (${res.statusText}) - ${data.message}`);
+      return new ErrorConstructor(`${res.status} (${res.statusText}) - ${message}`);
     }
 
     _sortIssueLinks(l1, l2) {
