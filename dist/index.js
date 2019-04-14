@@ -1,5 +1,5 @@
 javascript:/* eslint-disable-line no-unused-labels *//*
- * # NgSlackLinkifier v0.2.3
+ * # NgSlackLinkifier v0.2.4
  *
  * ## What it does
  *
@@ -58,7 +58,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   /* Constants */
   const NAME = 'NgSlackLinkifier';
-  const VERSION = '0.2.3';
+  const VERSION = '0.2.4';
 
   const CLASS_GITHUB_COMMIT_LINK = 'nsl-github-commit';
   const CLASS_GITHUB_ISSUE_LINK = 'nsl-github-issue';
@@ -1051,8 +1051,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
             Committed on: ${info.committerDate.toLocaleString()}
           </small>
         </p>
-        <p style="align-items: flex-start; display: flex; font-size: 1.25em;">
-          <b>${subject}</b>
+        <p style="align-items: center; display: flex; font-size: 1.25em;">
+          <b style="flex: auto;">${subject}</b>
           <span style="color: gray; margin-left: 30px;">@${info.sha.slice(0, 7)}</span>
         </p>
         <pre style="margin-top: 24px;">${body || '<i>No body.</i>'}</pre>
