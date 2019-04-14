@@ -457,7 +457,10 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       const data = res.headers.get('Content-Type').includes('application/json') ?
         await res.json() :
         (await res.text()).trim();
-      const message = data.message || JSON.stringify(data);
+      const message = !Array.isArray(data.errorMessages) ?
+        JSON.stringify(data) : (data.errorMessages.length === 1) ?
+          data.errorMessages[0] :
+          ['Errors:', ...data.errorMessages.map(e => `  - ${e}`)].join('\n');
 
       switch (res.status) {
         case 401:
