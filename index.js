@@ -396,14 +396,59 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     getIssueInfo(number) {
-      const url = `${this._baseUrl}/issue/${number}`;
+      const url = `${this._baseUrl}/issue/${number}?expand=renderedFields&` +
+        'fields=assignee,description,fixVersions,issuelinks,issuetype,project,reporter,status,summary';
+
       return this._getJson(url).
-        then(data => ({...data})).
+        then(data => ({
+          number: data.key,
+          type: data.fields.issuetype.name,
+          title: data.fields.summary,
+          description: data.renderedFields.description.trim(),
+          reporter: this._extractUserInfo(data.fields.reporter),
+          assignee: data.fields.assignee && this._extractUserInfo(data.fields.assignee),
+          status: this._extractStatusInfo(data.fields.status),
+          project: data.fields.project.name,
+          fixVersions: data.fields.fixVersions.map(x => x.name).sort(),
+          issueLinks: data.fields.issuelinks.
+            map(x => this._extractIssueLinkInfo(x)).
+            sort((a, b) => this._sortIssueLinks(a, b)),
+        })).
         catch(err => { throw this._wrapError(err, `Error getting Jira info for ${number}:`); });
     }
 
     requiresToken() {
       return !this._headers && 'Unauthenticated requests are not supported.';
+    }
+
+    _extractIssueLinkInfo(link) {
+      const isInward = link.hasOwnProperty('inwardIssue');
+      const otherIssue = isInward ? link.inwardIssue : link.outwardIssue;
+      return {
+        type: isInward ? link.type.inward : link.type.outward,
+        otherIssue: {
+          number: otherIssue.key,
+          url: `https://angular-team.atlassian.net/browse/${otherIssue.key}`,
+          title: otherIssue.fields.summary,
+          status: this._extractStatusInfo(otherIssue.fields.status),
+        },
+      };
+    }
+
+    _extractStatusInfo(status) {
+      return {
+        name: status.name,
+        color: status.statusCategory.colorName,
+      };
+    }
+
+    _extractUserInfo(user) {
+      return {
+        avatar: user.avatarUrls['32x32'],
+        username: user.name,
+        name: user.displayName,
+        url: `https://angular-team.atlassian.net/people/${user.accountId}`,
+      };
     }
 
     _generateHeaders(token) {
@@ -417,6 +462,14 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       if (!data.message) data = {message: JSON.stringify(data)};
 
       return new Error(`${res.status} (${res.statusText}) - ${data.message}`);
+    }
+
+    _sortIssueLinks(l1, l2) {
+      return (l1.type < l2.type) ?
+        -1 : (l1.type > l2.type) ?
+          +1 : (l1.otherIssue.number < l2.otherIssue.number) ?
+            -1 :
+            +1;
     }
   }
 
@@ -1075,22 +1128,145 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       const requiresTokenContent = this._checkRequiresToken(this._jiraUtils);
       if (requiresTokenContent) return requiresTokenContent;
 
+      const colorPerStatus = {
+        closed: 'red',
+        done: 'green',
+        'in progress': 'blue',
+        'in review': 'darkorchid',
+        open: 'gray',
+        reopened: 'gray',
+        resolved: 'green',
+        'selected for development': 'gray',
+      };
+
       const number = data.nslNumber;
-
       const info = await this._jiraUtils.getIssueInfo(number);
+      const groupedIssueLinks = info.issueLinks.reduce((aggr, link) => {
+        const group = aggr[link.type] || (aggr[link.type] = []);
+        group.push(link);
+        return aggr;
+      }, {});
 
-      /* TODO(gkalpak): Implement proper popup for Jira issues. */
+      const issueLinkHtml = (link, i) => {
+        const issue = link.otherIssue;
+        const status = issue.status.name;
+        const isClosed = ['closed', 'done', 'resolved'].includes(status.toLowerCase());
+
+        return `
+          <li style="
+                align-items: center;
+                ${(i % 2) ? 'background-color: rgba(0, 0, 0, 0.05);' : ''}
+                display: flex;
+                padding: 2px 5px;
+              ">
+            <span style="flex: auto; ${isClosed ? 'text-decoration: line-through;' : ''}">
+              <a href="${issue.url}" target="_blank" style="display: flex;">
+                <b style="white-space: nowrap;">${issue.number}:&ensp;</b>
+                ${issue.title}
+              </a>
+            </span>
+            <small style="
+                  background-color: ${colorPerStatus[status.toLowerCase()] || 'black'};
+                  border-radius: 6px;
+                  color: white;
+                  font-size: 0.75em;
+                  margin-left: 10px;
+                  padding: 0 4px;
+                  text-align: center;
+                  white-space: nowrap;
+                ">
+              ${status.toUpperCase()}
+            </small>
+          </li>
+        `;
+      };
+
+      const issueLinkGroupHtml = type => `
+        <div>
+          <i style="text-transform: capitalize;">${type} (${groupedIssueLinks[type].length}):</i>
+          <ul style="margin: 5px 0 15px 15px;">
+            ${groupedIssueLinks[type].reverse().map(issueLinkHtml).join('')}
+          </ul>
+        </div>
+      `;
+
       return `
-        <p><b>Jira issue ${number}:</b></p>
-        <p style="color: orange;">
-          Info popups for Jira issues are still under construction.<br />
-          In the meantime, here is the raw API response in JSON format.<br />
-          <br />
-          Good luck :P
+        <p style="
+              align-items: center;
+              border-bottom: 1px solid lightgray;
+              display: flex;
+              font-size: 0.9em;
+              padding-bottom: 8px;
+            ">
+          <span style="align-items: center; display: flex; margin-right: 15px;">
+            <img src="${info.reporter.avatar}" width="25" height="25" style="border-radius: 6px; margin-right: 5px;" />
+            <span style="flex-direction: column; display: flex;">
+              <small style="color: gray;">Reported by:</small>
+              <a href="${info.reporter.url}" target="_blank">${info.reporter.name}</a>
+            </span>
+          </span>
+          <span style="align-items: center; flex: auto; display: flex; margin-right: 15px;">
+            <img src="${!info.assignee ? '' : info.assignee.avatar}" width="25" height="25"
+                style="border-radius: 6px; margin-right: 5px;" />
+            <span style="flex-direction: column; display: flex;">
+              <small style="color: gray;">Assigned to:</small>
+              ${!info.assignee ? '-' : `<a href="${info.assignee.url}" target="_blank">${info.assignee.name}</a>`}
+            </span>
+          </span>
+          <span style="flex-direction: column; display: flex; text-align: right;">
+            <span>
+              <span style="color: lightgray;">Project:</span>
+              <span style="color: gray;">${info.project}</span>
+            </span>
+            <span>
+              <span style="color: lightgray;">Fix version(s):</span>
+              <span style="color: gray;">
+                ${info.fixVersions.map(l => `
+                  <small style="
+                        border: 1px solid;
+                        border-radius: 6px;
+                        line-height: 2.5em;
+                        margin-left: 3px;
+                        padding: 2px 4px;
+                        text-align: center;
+                        white-space: nowrap;
+                      ">${l}</small>
+                `).join('\n') || '-'}
+              </span>
+            </span>
+          </span>
         </p>
-        <pre style="white-space: pre; width: fit-content;">
-          ${JSON.stringify(info, null, 2)}
+        <p style="align-items: center; display: flex; font-size: 1.25em;">
+          <span style="
+                background-color: ${colorPerStatus[info.status.name.toLowerCase()] || 'black'};
+                border-radius: 6px;
+                color: white;
+                font-size: 0.75em;
+                margin-right: 10px;
+                padding: 3px 6px;
+                text-align: center;
+                white-space: nowrap;
+              ">
+            ${info.status.name.toUpperCase()}
+          </span>
+          <b style="flex: auto;">${info.title}</b>
+          <span style="color: gray; margin-left: 30px; white-space: nowrap;">
+            <span style="color: lightgray;">${info.type}:</span>
+            ${info.number}
+          </span>
+        </p>
+        <pre style="margin-top: 24px; white-space: normal;">
+          ${info.description || '<i style="color: gray;">No description.</i>'}
         </pre>
+        ${!info.issueLinks.length ? '' : `
+          <hr />
+          <div>
+            <p><b>Linked issues (${info.issueLinks.length}):</b></p>
+            <div style="padding-left: 15px;">
+              ${Object.keys(groupedIssueLinks).map(issueLinkGroupHtml).join('')}
+            </div>
+          </div>
+        `}
       `;
     }
 
