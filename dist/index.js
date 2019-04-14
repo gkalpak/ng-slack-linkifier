@@ -1,5 +1,5 @@
 javascript:/* eslint-disable-line no-unused-labels *//*
- * # NgSlackLinkifier v0.2.4
+ * # NgSlackLinkifier v0.3.0
  *
  * ## What it does
  *
@@ -58,7 +58,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   /* Constants */
   const NAME = 'NgSlackLinkifier';
-  const VERSION = '0.2.4';
+  const VERSION = '0.3.0';
 
   const CLASS_GITHUB_COMMIT_LINK = 'nsl-github-commit';
   const CLASS_GITHUB_ISSUE_LINK = 'nsl-github-issue';
@@ -87,7 +87,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       this._cacheMaxAge = 60000;
       this._cache = new Map();
 
-      this._headers = null;
+      this.setToken(null);
     }
 
     cleanUp() {
@@ -95,10 +95,13 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       this._cache.clear();
     }
 
-    requiresToken() { this._notImplemented(); }
+    hasToken() { return this._token !== undefined; }
+
+    requiresToken() { return this._notImplemented(); }
 
     setToken(token) {
-      this._headers = token ? this._generateHeaders(token) : undefined;
+      this._token = token || undefined;
+      this._headers = this._token && this._generateHeaders(this._token);
     }
 
     _generateHeaders(token) { this._notImplemented(token); }
@@ -236,9 +239,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     requiresToken() {
-      return (this._rateLimitResetTime > Date.now()) ?
-        `Anonymous rate-limit reached (until ${new Date(this._rateLimitResetTime).toLocaleString()})` :
-        false;
+      return !this.hasToken() && (this._rateLimitResetTime > Date.now()) &&
+        `Anonymous rate-limit reached (until ${new Date(this._rateLimitResetTime).toLocaleString()})`;
     }
 
     _extractFileInfo(file) {
@@ -274,7 +276,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
       switch (res.status) {
         case 401:
-          if (this._headers) ErrorConstructor = this._getErrorConstructorExtending(AbstractInvalidTokenError);
+          if (this.hasToken()) ErrorConstructor = this._getErrorConstructorExtending(AbstractInvalidTokenError);
           break;
         case 403:
           if (res.headers.get('X-RateLimit-Remaining') === '0') {
@@ -417,9 +419,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         catch(err => { throw this._wrapError(err, `Error getting Jira info for ${number}:`); });
     }
 
-    requiresToken() {
-      return !this._headers && 'Unauthenticated requests are not supported.';
-    }
+    requiresToken() { return !this.hasToken() && 'Unauthenticated requests are not supported.'; }
 
     _extractIssueLinkInfo(link) {
       const isInward = link.hasOwnProperty('inwardIssue');
@@ -451,9 +451,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       };
     }
 
-    _generateHeaders(token) {
-      return {Authorization: `Basic ${window.btoa(token)}`};
-    }
+    _generateHeaders(token) { return {Authorization: `Basic ${window.btoa(token)}`}; }
 
     async _getErrorForResponse(res) {
       let ErrorConstructor = Error;
@@ -465,7 +463,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
       switch (res.status) {
         case 401:
-          if (this._headers) ErrorConstructor = this._getErrorConstructorExtending(AbstractInvalidTokenError);
+          if (this.hasToken()) ErrorConstructor = this._getErrorConstructorExtending(AbstractInvalidTokenError);
           break;
       }
 
@@ -825,10 +823,9 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         const root = document.querySelector('#client_body');
         this._linkifier.processAll([root], true);
         this._linkifier.observe(root);
+        this._postInstall();
 
         this._logUtils.log('Installed.');
-
-        this._checkForUpdate();
       } catch (err) {
         this._onError(err);
       }
@@ -903,13 +900,10 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       try {
         this._logUtils.log('Checking for updates...');
 
-        const update = await this._updateUtils.checkForUpdate(VERSION);
+        this._schedule(() => this._checkForUpdate(), 1000 * 60 * 60 * 24 * 2);
+        const update = await this._whileNotDestroyed(this._updateUtils.checkForUpdate(VERSION));
 
-        if (!update) {
-          this._logUtils.log('No updates available.');
-          this._schedule(() => this._checkForUpdate(), 1000 * 60 * 60 * 24 * 2);
-          return;
-        }
+        if (!update) return this._logUtils.log('No updates available.');
 
         this._logUtils.log(`Update available: ${update.version} (${update.url})`);
 
@@ -946,7 +940,10 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
         this._uiUtils.showSnackbar(snackbarContent, -1);
       } catch (err) {
-        /* Checking for updates is not critical operations. Just log the error and move on. */
+        /*
+         * Checking for updates is not a critical operation.
+         * Just log the error and move on (hoping the error is temporary).
+         */
         this._logUtils.warn(`Error while checking for updates: ${err.message || err}`);
       }
     }
@@ -969,6 +966,14 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       });
 
       return content;
+    }
+
+    _clearTokens() {
+      [this._ghUtils, this._jiraUtils].forEach(provider => {
+        const storageKey = this._KEYS.get(provider.constructor);
+        this._storageUtils.delete(storageKey);
+        provider.setToken(null);
+      });
     }
 
     async _getPopupContentForGithubCommit(data) {
@@ -1427,6 +1432,35 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           '<small>(See the console for more details.)</small>' +
         '</pre>',
         10000);
+    }
+
+    _postInstall() {
+      const hasTokens = [this._ghUtils, this._jiraUtils].some(provider => provider.hasToken());
+      const snackbarContent = Object.assign(document.createElement('div'), {
+        innerHTML: `
+          <b style="color: cornflowerblue;">${NAME} v${VERSION} is up and running 😎</b>
+          ${!hasTokens ? '' : `
+            <small style="color: gray; display: block; margin-top: 16px;">
+              Available actions:
+              <a class="nsl-install-btn-clear-tokens">Clear stored tokens</a></li>
+            </small>
+          `}
+        `,
+      });
+
+      if (hasTokens) {
+        this._uiUtils.widgetUtils.asButtonLink(
+          this._uiUtils.widgetUtils.withListeners(snackbarContent.querySelector('.nsl-install-btn-clear-tokens'), {
+            click: evt => {
+              this._clearTokens();
+              this._uiUtils.showSnackbar('<b style="color: green;">Successfully removed stored tokens.</b>', 2000);
+              evt.target.parentNode.remove();
+            },
+          }));
+      }
+
+      this._uiUtils.showSnackbar(snackbarContent, 5000);
+      this._schedule(() => this._checkForUpdate(), 10000);
     }
 
     _schedule(fn, delay) {
