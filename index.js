@@ -87,7 +87,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       this._cacheMaxAge = 60000;
       this._cache = new Map();
 
-      this._headers = null;
+      this.setToken(null);
     }
 
     cleanUp() {
@@ -95,10 +95,13 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       this._cache.clear();
     }
 
-    requiresToken() { this._notImplemented(); }
+    hasToken() { return this._token !== undefined; }
+
+    requiresToken() { return this._notImplemented(); }
 
     setToken(token) {
-      this._headers = token ? this._generateHeaders(token) : undefined;
+      this._token = token || undefined;
+      this._headers = this._token && this._generateHeaders(this._token);
     }
 
     _generateHeaders(token) { this._notImplemented(token); }
@@ -274,7 +277,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
       switch (res.status) {
         case 401:
-          if (this._headers) ErrorConstructor = this._getErrorConstructorExtending(AbstractInvalidTokenError);
+          if (this.hasToken()) ErrorConstructor = this._getErrorConstructorExtending(AbstractInvalidTokenError);
           break;
         case 403:
           if (res.headers.get('X-RateLimit-Remaining') === '0') {
@@ -417,9 +420,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         catch(err => { throw this._wrapError(err, `Error getting Jira info for ${number}:`); });
     }
 
-    requiresToken() {
-      return !this._headers && 'Unauthenticated requests are not supported.';
-    }
+    requiresToken() { return !this.hasToken() && 'Unauthenticated requests are not supported.'; }
 
     _extractIssueLinkInfo(link) {
       const isInward = link.hasOwnProperty('inwardIssue');
@@ -451,9 +452,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       };
     }
 
-    _generateHeaders(token) {
-      return {Authorization: `Basic ${window.btoa(token)}`};
-    }
+    _generateHeaders(token) { return {Authorization: `Basic ${window.btoa(token)}`}; }
 
     async _getErrorForResponse(res) {
       let ErrorConstructor = Error;
@@ -465,7 +464,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
       switch (res.status) {
         case 401:
-          if (this._headers) ErrorConstructor = this._getErrorConstructorExtending(AbstractInvalidTokenError);
+          if (this.hasToken()) ErrorConstructor = this._getErrorConstructorExtending(AbstractInvalidTokenError);
           break;
       }
 
