@@ -80,7 +80,6 @@ Things I want to (but won't necessarily) do:
 - Try out `DomUtils` and see if size/ergonomics improve.
   - Consider having a "library" of re-usable components and/or templates (e.g. button, text-field, etc.).
 - Show more info for PRs (e.g. first try `.../pulls/<number>` and if it fails then `.../issues/<number>`?
-- Add support for removing/resetting tokens via the UI. (How?)
 - Aid in writing messages (e.g. offer auto-complete suggestions for GitHub issues/PRs and Jira issues).
 - Recognize, shorten and show info for more GitHub URLs.
   - More PR URL formats (e.g. `/files`?, `/commits/...`?, `#issuecomment-12345` (and similar forms)?).

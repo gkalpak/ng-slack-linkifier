@@ -823,10 +823,9 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         const root = document.querySelector('#client_body');
         this._linkifier.processAll([root], true);
         this._linkifier.observe(root);
+        this._postInstall();
 
         this._logUtils.log('Installed.');
-
-        this._checkForUpdate();
       } catch (err) {
         this._onError(err);
       }
@@ -967,6 +966,14 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       });
 
       return content;
+    }
+
+    _clearTokens() {
+      [this._ghUtils, this._jiraUtils].forEach(provider => {
+        const storageKey = this._KEYS.get(provider.constructor);
+        this._storageUtils.delete(storageKey);
+        provider.setToken(null);
+      });
     }
 
     async _getPopupContentForGithubCommit(data) {
@@ -1425,6 +1432,35 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           '<small>(See the console for more details.)</small>' +
         '</pre>',
         10000);
+    }
+
+    _postInstall() {
+      const hasTokens = [this._ghUtils, this._jiraUtils].some(provider => provider.hasToken());
+      const snackbarContent = Object.assign(document.createElement('div'), {
+        innerHTML: `
+          <b style="color: cornflowerblue;">${NAME} v${VERSION} is up and running 😎</b>
+          ${!hasTokens ? '' : `
+            <small style="color: gray; display: block; margin-top: 16px;">
+              Available actions:
+              <a class="nsl-install-btn-clear-tokens">Clear stored tokens</a></li>
+            </small>
+          `}
+        `,
+      });
+
+      if (hasTokens) {
+        this._uiUtils.widgetUtils.asButtonLink(
+          this._uiUtils.widgetUtils.withListeners(snackbarContent.querySelector('.nsl-install-btn-clear-tokens'), {
+            click: evt => {
+              this._clearTokens();
+              this._uiUtils.showSnackbar('<b style="color: green;">Successfully removed stored tokens.</b>', 2000);
+              evt.target.parentNode.remove();
+            },
+          }));
+      }
+
+      this._uiUtils.showSnackbar(snackbarContent, 5000);
+      this._schedule(() => this._checkForUpdate(), 10000);
     }
 
     _schedule(fn, delay) {
