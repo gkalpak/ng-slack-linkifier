@@ -65,6 +65,7 @@ This comment is a good starting point for manual testing:
 - This is (supposedly) yet another Jira issue: https://angular-team.atlassian.net/browse/COMP-45
 - These are "raw" references to Jira issues: FW-1234, TOOL-345, COMP-45 (see the link? :stuck_out_tongue:)
 - These are not, but still recongized as such: NOTEXISTS-1337, NEITHERTHIS-7331 ¯\_(ツ)_/¯
+- There ones have linked issues: FW-1152, FW-1220, AVM-15 (info popups ftw)
 ```
 
 
