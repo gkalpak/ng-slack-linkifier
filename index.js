@@ -239,9 +239,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     requiresToken() {
-      return (this._rateLimitResetTime > Date.now()) ?
-        `Anonymous rate-limit reached (until ${new Date(this._rateLimitResetTime).toLocaleString()})` :
-        false;
+      return !this.hasToken() && (this._rateLimitResetTime > Date.now()) &&
+        `Anonymous rate-limit reached (until ${new Date(this._rateLimitResetTime).toLocaleString()})`;
     }
 
     _extractFileInfo(file) {
