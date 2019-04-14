@@ -270,9 +270,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
     async _getErrorForResponse(res) {
       let ErrorConstructor = Error;
-      let data = await res.json();
-
-      if (!data.message) data = {message: JSON.stringify(data)};
+      const data = await res.json();
+      let message = data.message || JSON.stringify(data);
 
       switch (res.status) {
         case 401:
@@ -285,12 +284,12 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
             this._rateLimitResetTime = reset.getTime();
 
-            data.message = `0/${limit} API requests remaining until ${reset.toLocaleString()}.\n${data.message}`;
+            message = `0/${limit} API requests remaining until ${reset.toLocaleString()}.\n${message}`;
           }
           break;
       }
 
-      return new ErrorConstructor(`${res.status} (${res.statusText}) - ${data.message}`);
+      return new ErrorConstructor(`${res.status} (${res.statusText}) - ${message}`);
     }
   }
 
@@ -455,11 +454,10 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
     async _getErrorForResponse(res) {
       let ErrorConstructor = Error;
-      let data = res.headers.get('Content-Type').includes('application/json') ?
+      const data = res.headers.get('Content-Type').includes('application/json') ?
         await res.json() :
         (await res.text()).trim();
-
-      if (!data.message) data = {message: JSON.stringify(data)};
+      const message = data.message || JSON.stringify(data);
 
       switch (res.status) {
         case 401:
@@ -467,7 +465,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           break;
       }
 
-      return new ErrorConstructor(`${res.status} (${res.statusText}) - ${data.message}`);
+      return new ErrorConstructor(`${res.status} (${res.statusText}) - ${message}`);
     }
 
     _sortIssueLinks(l1, l2) {
