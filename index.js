@@ -219,7 +219,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           description: data.body.trim(),
           author: this._extractUserInfo(data.user),
           state: data.state,
-          labels: data.labels.map(l => l.name),
+          labels: data.labels.map(l => l.name).sort(),
           isPr: data.html_url.endsWith(`/pull/${data.number}`),
         })).
         catch(err => {
@@ -975,8 +975,14 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       };
 
       return `
-        <p style="display: flex; font-size: 0.9em; justify-content: space-between;">
-          <span>
+        <p style="
+              align-items: center;
+              border-bottom: 1px solid lightgray;
+              display: flex;
+              font-size: 0.9em;
+              padding-bottom: 8px;
+            ">
+          <span style="flex: auto; margin-right: 15px;">
             <img src="${info.author.avatar}" width="25" height="25" style="border-radius: 6px;" />
             <a href="${info.author.url}" target="_blank">@${info.author.username}</a>
           </span>
@@ -986,9 +992,9 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         </p>
         <p style="align-items: flex-start; display: flex; font-size: 1.25em;">
           <b>${subject}</b>
-          <span style="color: gray; margin-left: 5px;">@${info.sha.slice(0, 7)}</span>
+          <span style="color: gray; margin-left: 30px;">@${info.sha.slice(0, 7)}</span>
         </p>
-        ${body && `<br /><pre>${body}</pre>`}
+        <pre style="margin-top: 24px;">${body || '<i>No body.</i>'}</pre>
         <hr />
         <div>
           <p style="display: flex;">
@@ -1018,18 +1024,24 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       const description = info.description.replace(/^<!--[^]*?-->\s*/, '');
 
       return `
-        <p style="display: flex; font-size: 0.9em; justify-content: space-between;">
-          <span>
+        <p style="
+              align-items: center;
+              border-bottom: 1px solid lightgray;
+              display: flex;
+              font-size: 0.9em;
+              padding-bottom: 8px;
+            ">
+          <span style="flex: auto; margin-right: 15px;">
             <img src="${info.author.avatar}" width="25" height="25" style="border-radius: 6px;" />
             <a href="${info.author.url}" target="_blank">@${info.author.username}</a>
           </span>
           <span style="text-align: right;">
-            ${info.labels.sort().map(l => `
+            ${info.labels.map(l => `
               <small style="
                     border: 1px solid;
                     border-radius: 6px;
                     line-height: 2.5em;
-                    margin: 0 3px;
+                    margin-left: 3px;
                     padding: 2px 4px;
                     text-align: center;
                     white-space: nowrap;
@@ -1037,26 +1049,25 @@ javascript:/* eslint-disable-line no-unused-labels *//*
             `).join('\n')}
           </span>
         </p>
-        <p style="align-items: flex-start; display: flex; font-size: 1.25em;">
+        <p style="align-items: center; display: flex; font-size: 1.25em;">
           <span style="
-                background-color: ${colorPerState[info.state]};
+                background-color: ${colorPerState[info.state] || 'black'};
                 border-radius: 6px;
                 color: white;
                 font-size: 0.75em;
-                margin-right: 5px;
-                padding: 2px 4px;
+                margin-right: 10px;
+                padding: 3px 6px;
                 text-align: center;
               ">
             ${info.state.toUpperCase()}
           </span>
           <b style="flex: auto;">${info.title}</b>
-          <span style="color: gray; margin-left: 5px; white-space: nowrap;">
+          <span style="color: gray; margin-left: 30px; white-space: nowrap;">
             <span style="color: lightgray;">${info.isPr ? 'PR' : 'Issue'}:</span>
             #${info.number}
           </span>
         </p>
-        <br />
-        <pre>${description || '<i style="color: gray;">No description.</i>'}</pre>
+        <pre style="margin-top: 24px;">${description || '<i style="color: gray;">No description.</i>'}</pre>
       `;
     }
 
