@@ -868,12 +868,12 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         try {
           const id = interactionId;
 
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await this._whileNotDestroyed(new Promise(resolve => setTimeout(resolve, 500)));
           if (id !== interactionId) return;  /* Abort if already "mouseleft". */
 
           linkStyle.cursor = 'progress';
 
-          const html = await getPopupContent(linkData);
+          const html = await this._whileNotDestroyed(getPopupContent(linkData));
           if (id !== interactionId) return;  /* Abort if already "mouseleft". */
 
           linkStyle.cursor = cursorStyle;
