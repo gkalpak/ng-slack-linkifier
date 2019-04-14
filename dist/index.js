@@ -1,5 +1,5 @@
 javascript:/* eslint-disable-line no-unused-labels *//*
- * # NgSlackLinkifier v0.2.2
+ * # NgSlackLinkifier v0.2.3
  *
  * ## What it does
  *
@@ -58,7 +58,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   /* Constants */
   const NAME = 'NgSlackLinkifier';
-  const VERSION = '0.2.2';
+  const VERSION = '0.2.3';
 
   const CLASS_GITHUB_COMMIT_LINK = 'nsl-github-commit';
   const CLASS_GITHUB_ISSUE_LINK = 'nsl-github-issue';
@@ -219,12 +219,20 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           description: data.body.trim(),
           author: this._extractUserInfo(data.user),
           state: data.state,
-          labels: data.labels.map(l => l.name),
+          labels: data.labels.map(l => l.name).sort(),
           isPr: data.html_url.endsWith(`/pull/${data.number}`),
         })).
         catch(err => {
           throw this._wrapError(err, `Error getting GitHub info for ${owner}/${repo}#${number}:`);
         });
+    }
+
+    getLatestTag(owner, repo) {
+      /* Tags are listed in reverse order. */
+      const url = `${this._baseUrl}/${owner}/${repo}/tags?per_page=1`;
+      return this._getJson(url).
+        then(data => data[0]).
+        catch(err => { throw this._wrapError(err, `Error getting latest GitHub tag ${owner}/${repo}:`); });
     }
 
     requiresToken() {
@@ -388,9 +396,24 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     getIssueInfo(number) {
-      const url = `${this._baseUrl}/issue/${number}`;
+      const url = `${this._baseUrl}/issue/${number}?expand=renderedFields&` +
+        'fields=assignee,description,fixVersions,issuelinks,issuetype,project,reporter,status,summary';
+
       return this._getJson(url).
-        then(data => ({...data})).
+        then(data => ({
+          number: data.key,
+          type: data.fields.issuetype.name,
+          title: data.fields.summary,
+          description: data.renderedFields.description.trim(),
+          reporter: this._extractUserInfo(data.fields.reporter),
+          assignee: data.fields.assignee && this._extractUserInfo(data.fields.assignee),
+          status: this._extractStatusInfo(data.fields.status),
+          project: data.fields.project.name,
+          fixVersions: data.fields.fixVersions.map(x => x.name).sort(),
+          issueLinks: data.fields.issuelinks.
+            map(x => this._extractIssueLinkInfo(x)).
+            sort((a, b) => this._sortIssueLinks(a, b)),
+        })).
         catch(err => { throw this._wrapError(err, `Error getting Jira info for ${number}:`); });
     }
 
@@ -398,17 +421,63 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       return !this._headers && 'Unauthenticated requests are not supported.';
     }
 
+    _extractIssueLinkInfo(link) {
+      const isInward = link.hasOwnProperty('inwardIssue');
+      const otherIssue = isInward ? link.inwardIssue : link.outwardIssue;
+      return {
+        type: isInward ? link.type.inward : link.type.outward,
+        otherIssue: {
+          number: otherIssue.key,
+          url: `https://angular-team.atlassian.net/browse/${otherIssue.key}`,
+          title: otherIssue.fields.summary,
+          status: this._extractStatusInfo(otherIssue.fields.status),
+        },
+      };
+    }
+
+    _extractStatusInfo(status) {
+      return {
+        name: status.name,
+        color: status.statusCategory.colorName,
+      };
+    }
+
+    _extractUserInfo(user) {
+      return {
+        avatar: user.avatarUrls['32x32'],
+        username: user.name,
+        name: user.displayName,
+        url: `https://angular-team.atlassian.net/people/${user.accountId}`,
+      };
+    }
+
     _generateHeaders(token) {
       return {Authorization: `Basic ${window.btoa(token)}`};
     }
 
     async _getErrorForResponse(res) {
-      const isJson = res.headers.get('Content-Type').includes('application/json');
-      let data = isJson ? await res.json() : (await res.text()).trim();
+      let ErrorConstructor = Error;
+      let data = res.headers.get('Content-Type').includes('application/json') ?
+        await res.json() :
+        (await res.text()).trim();
 
       if (!data.message) data = {message: JSON.stringify(data)};
 
-      return new Error(`${res.status} (${res.statusText}) - ${data.message}`);
+      switch (res.status) {
+        case 401:
+          if (this._headers) ErrorConstructor = this._getErrorConstructorExtending(AbstractInvalidTokenError);
+          break;
+      }
+
+      return new ErrorConstructor(`${res.status} (${res.statusText}) - ${data.message}`);
+    }
+
+    _sortIssueLinks(l1, l2) {
+      return (l1.type < l2.type) ?
+        -1 : (l1.type > l2.type) ?
+          +1 : (l1.otherIssue.number < l2.otherIssue.number) ?
+            -1 :
+            +1;
     }
   }
 
@@ -685,9 +754,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       this._prefix = `[${prefix}]`;
     }
 
-    cleanUp() {
-      /* Nothing to clean up. */
-    }
+    cleanUp() { /* Nothing to clean up. */ }
 
     log(...args) {
       console.log(this._prefix, ...args);
@@ -719,6 +786,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
         this._ghUtils = new GithubUtils(),
         this._jiraUtils = new JiraUtils(),
+
+        this._updateUtils = new UpdateUtils(this._ghUtils),
       ];
 
       this._cleanUpFns = [
@@ -758,6 +827,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         this._linkifier.observe(root);
 
         this._logUtils.log('Installed.');
+
+        this._checkForUpdate();
       } catch (err) {
         this._onError(err);
       }
@@ -797,12 +868,12 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         try {
           const id = interactionId;
 
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await this._whileNotDestroyed(new Promise(resolve => setTimeout(resolve, 500)));
           if (id !== interactionId) return;  /* Abort if already "mouseleft". */
 
           linkStyle.cursor = 'progress';
 
-          const html = await getPopupContent(linkData);
+          const html = await this._whileNotDestroyed(getPopupContent(linkData));
           if (id !== interactionId) return;  /* Abort if already "mouseleft". */
 
           linkStyle.cursor = cursorStyle;
@@ -828,6 +899,58 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         () => link.removeEventListener('mouseleave', onMouseleave));
     }
 
+    async _checkForUpdate() {
+      try {
+        this._logUtils.log('Checking for updates...');
+
+        const update = await this._updateUtils.checkForUpdate(VERSION);
+
+        if (!update) {
+          this._logUtils.log('No updates available.');
+          this._schedule(() => this._checkForUpdate(), 1000 * 60 * 60 * 24 * 2);
+          return;
+        }
+
+        this._logUtils.log(`Update available: ${update.version} (${update.url})`);
+
+        const color = 'cornflowerblue';
+        const snackbarContent = Object.assign(document.createElement('div'), {
+          innerHTML: `
+            <header style="font-size: 0.75em; opacity: 0.5;"><p>${NAME} v${VERSION}</p></header>
+            <section style="color: ${color};">
+              <p><b>New version of ${NAME} available: v${update.version}</b></p>
+              <p>
+                <a class="nsl-update-btn-open" href="${update.url}" target="_blank">See the code</a> or
+                <a class="nsl-update-btn-copy" href="">copy it to clipboard</a>.
+              </p>
+            </section>
+          `,
+        });
+        this._uiUtils.widgetUtils.asButtonLink(snackbarContent.querySelector('.nsl-update-btn-open'));
+        this._uiUtils.widgetUtils.asButtonLink(
+          this._uiUtils.widgetUtils.withListeners(snackbarContent.querySelector('.nsl-update-btn-copy'), {
+            click: () => {
+              try {
+                this._uiUtils.copyToClipboard(update.code);
+                this._uiUtils.showSnackbar(`
+                  <div style="color: green;">
+                    <p><b>Code for v${update.version} successfully copied to clipboard.</b></p>
+                    <small>(Hopefully you know what to do 🙂)</small>
+                  </div>
+                `, 5000);
+              } catch (err) {
+                this._onError(err);
+              }
+            },
+          }));
+
+        this._uiUtils.showSnackbar(snackbarContent, -1);
+      } catch (err) {
+        /* Checking for updates is not critical operations. Just log the error and move on. */
+        this._logUtils.warn(`Error while checking for updates: ${err.message || err}`);
+      }
+    }
+
     _checkRequiresToken(provider) {
       const requiresTokenReason = provider.requiresToken();
       if (!requiresTokenReason) return;
@@ -841,18 +964,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           <div><button>Provide token now</button></div>
         `,
       });
-
-      Object.assign(content.querySelector('button'), {
-        onclick: async () => provider.setToken(await this._promptForToken(provider.constructor)),
-        onmouseenter: evt => evt.target.style.borderColor = 'orange',
-        onmouseleave: evt => evt.target.style.borderColor = 'white',
-        style: `
-          background-color: cornflowerblue;
-          border: 2px solid white;
-          border-radius: 6px;
-          color: white;
-          padding: 10px 15px;
-        `,
+      this._uiUtils.widgetUtils.asButton(content.querySelector('button'), 'cornflowerblue', {
+        click: async () => provider.setToken(await this._promptForToken(provider.constructor)),
       });
 
       return content;
@@ -923,8 +1036,14 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       };
 
       return `
-        <p style="display: flex; font-size: 0.9em; justify-content: space-between;">
-          <span>
+        <p style="
+              align-items: center;
+              border-bottom: 1px solid lightgray;
+              display: flex;
+              font-size: 0.9em;
+              padding-bottom: 8px;
+            ">
+          <span style="flex: auto; margin-right: 15px;">
             <img src="${info.author.avatar}" width="25" height="25" style="border-radius: 6px;" />
             <a href="${info.author.url}" target="_blank">@${info.author.username}</a>
           </span>
@@ -934,9 +1053,9 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         </p>
         <p style="align-items: flex-start; display: flex; font-size: 1.25em;">
           <b>${subject}</b>
-          <span style="color: gray; margin-left: 5px;">@${info.sha.slice(0, 7)}</span>
+          <span style="color: gray; margin-left: 30px;">@${info.sha.slice(0, 7)}</span>
         </p>
-        ${body && `<br /><pre>${body}</pre>`}
+        <pre style="margin-top: 24px;">${body || '<i>No body.</i>'}</pre>
         <hr />
         <div>
           <p style="display: flex;">
@@ -966,18 +1085,24 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       const description = info.description.replace(/^<!--[^]*?-->\s*/, '');
 
       return `
-        <p style="display: flex; font-size: 0.9em; justify-content: space-between;">
-          <span>
+        <p style="
+              align-items: center;
+              border-bottom: 1px solid lightgray;
+              display: flex;
+              font-size: 0.9em;
+              padding-bottom: 8px;
+            ">
+          <span style="flex: auto; margin-right: 15px;">
             <img src="${info.author.avatar}" width="25" height="25" style="border-radius: 6px;" />
             <a href="${info.author.url}" target="_blank">@${info.author.username}</a>
           </span>
           <span style="text-align: right;">
-            ${info.labels.sort().map(l => `
+            ${info.labels.map(l => `
               <small style="
                     border: 1px solid;
                     border-radius: 6px;
                     line-height: 2.5em;
-                    margin: 0 3px;
+                    margin-left: 3px;
                     padding: 2px 4px;
                     text-align: center;
                     white-space: nowrap;
@@ -985,26 +1110,25 @@ javascript:/* eslint-disable-line no-unused-labels *//*
             `).join('\n')}
           </span>
         </p>
-        <p style="align-items: flex-start; display: flex; font-size: 1.25em;">
+        <p style="align-items: center; display: flex; font-size: 1.25em;">
           <span style="
-                background-color: ${colorPerState[info.state]};
+                background-color: ${colorPerState[info.state] || 'black'};
                 border-radius: 6px;
                 color: white;
                 font-size: 0.75em;
-                margin-right: 5px;
-                padding: 2px 4px;
+                margin-right: 10px;
+                padding: 3px 6px;
                 text-align: center;
               ">
             ${info.state.toUpperCase()}
           </span>
           <b style="flex: auto;">${info.title}</b>
-          <span style="color: gray; margin-left: 5px; white-space: nowrap;">
+          <span style="color: gray; margin-left: 30px; white-space: nowrap;">
             <span style="color: lightgray;">${info.isPr ? 'PR' : 'Issue'}:</span>
             #${info.number}
           </span>
         </p>
-        <br />
-        <pre>${description || '<i style="color: gray;">No description.</i>'}</pre>
+        <pre style="margin-top: 24px;">${description || '<i style="color: gray;">No description.</i>'}</pre>
       `;
     }
 
@@ -1012,22 +1136,145 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       const requiresTokenContent = this._checkRequiresToken(this._jiraUtils);
       if (requiresTokenContent) return requiresTokenContent;
 
+      const colorPerStatus = {
+        closed: 'red',
+        done: 'green',
+        'in progress': 'blue',
+        'in review': 'darkorchid',
+        open: 'gray',
+        reopened: 'gray',
+        resolved: 'green',
+        'selected for development': 'gray',
+      };
+
       const number = data.nslNumber;
-
       const info = await this._jiraUtils.getIssueInfo(number);
+      const groupedIssueLinks = info.issueLinks.reduce((aggr, link) => {
+        const group = aggr[link.type] || (aggr[link.type] = []);
+        group.push(link);
+        return aggr;
+      }, {});
 
-      /* TODO(gkalpak): Implement proper popup for Jira issues. */
+      const issueLinkHtml = (link, i) => {
+        const issue = link.otherIssue;
+        const status = issue.status.name;
+        const isClosed = ['closed', 'done', 'resolved'].includes(status.toLowerCase());
+
+        return `
+          <li style="
+                align-items: center;
+                ${(i % 2) ? 'background-color: rgba(0, 0, 0, 0.05);' : ''}
+                display: flex;
+                padding: 2px 5px;
+              ">
+            <span style="flex: auto; ${isClosed ? 'text-decoration: line-through;' : ''}">
+              <a href="${issue.url}" target="_blank" style="display: flex;">
+                <b style="white-space: nowrap;">${issue.number}:&ensp;</b>
+                ${issue.title}
+              </a>
+            </span>
+            <small style="
+                  background-color: ${colorPerStatus[status.toLowerCase()] || 'black'};
+                  border-radius: 6px;
+                  color: white;
+                  font-size: 0.75em;
+                  margin-left: 10px;
+                  padding: 0 4px;
+                  text-align: center;
+                  white-space: nowrap;
+                ">
+              ${status.toUpperCase()}
+            </small>
+          </li>
+        `;
+      };
+
+      const issueLinkGroupHtml = type => `
+        <div>
+          <i style="text-transform: capitalize;">${type} (${groupedIssueLinks[type].length}):</i>
+          <ul style="margin: 5px 0 15px 15px;">
+            ${groupedIssueLinks[type].reverse().map(issueLinkHtml).join('')}
+          </ul>
+        </div>
+      `;
+
       return `
-        <p><b>Jira issue ${number}:</b></p>
-        <p style="color: orange;">
-          Info popups for Jira issues are still under construction.<br />
-          In the meantime, here is the raw API response in JSON format.<br />
-          <br />
-          Good luck :P
+        <p style="
+              align-items: center;
+              border-bottom: 1px solid lightgray;
+              display: flex;
+              font-size: 0.9em;
+              padding-bottom: 8px;
+            ">
+          <span style="align-items: center; display: flex; margin-right: 15px;">
+            <img src="${info.reporter.avatar}" width="25" height="25" style="border-radius: 6px; margin-right: 5px;" />
+            <span style="flex-direction: column; display: flex;">
+              <small style="color: gray;">Reported by:</small>
+              <a href="${info.reporter.url}" target="_blank">${info.reporter.name}</a>
+            </span>
+          </span>
+          <span style="align-items: center; flex: auto; display: flex; margin-right: 15px;">
+            <img src="${!info.assignee ? '' : info.assignee.avatar}" width="25" height="25"
+                style="border-radius: 6px; margin-right: 5px;" />
+            <span style="flex-direction: column; display: flex;">
+              <small style="color: gray;">Assigned to:</small>
+              ${!info.assignee ? '-' : `<a href="${info.assignee.url}" target="_blank">${info.assignee.name}</a>`}
+            </span>
+          </span>
+          <span style="flex-direction: column; display: flex; text-align: right;">
+            <span>
+              <span style="color: lightgray;">Project:</span>
+              <span style="color: gray;">${info.project}</span>
+            </span>
+            <span>
+              <span style="color: lightgray;">Fix version(s):</span>
+              <span style="color: gray;">
+                ${info.fixVersions.map(l => `
+                  <small style="
+                        border: 1px solid;
+                        border-radius: 6px;
+                        line-height: 2.5em;
+                        margin-left: 3px;
+                        padding: 2px 4px;
+                        text-align: center;
+                        white-space: nowrap;
+                      ">${l}</small>
+                `).join('\n') || '-'}
+              </span>
+            </span>
+          </span>
         </p>
-        <pre style="white-space: pre; width: fit-content;">
-          ${JSON.stringify(info, null, 2)}
+        <p style="align-items: center; display: flex; font-size: 1.25em;">
+          <span style="
+                background-color: ${colorPerStatus[info.status.name.toLowerCase()] || 'black'};
+                border-radius: 6px;
+                color: white;
+                font-size: 0.75em;
+                margin-right: 10px;
+                padding: 3px 6px;
+                text-align: center;
+                white-space: nowrap;
+              ">
+            ${info.status.name.toUpperCase()}
+          </span>
+          <b style="flex: auto;">${info.title}</b>
+          <span style="color: gray; margin-left: 30px; white-space: nowrap;">
+            <span style="color: lightgray;">${info.type}:</span>
+            ${info.number}
+          </span>
+        </p>
+        <pre style="margin-top: 24px; white-space: normal;">
+          ${info.description || '<i style="color: gray;">No description.</i>'}
         </pre>
+        ${!info.issueLinks.length ? '' : `
+          <hr />
+          <div>
+            <p><b>Linked issues (${info.issueLinks.length}):</b></p>
+            <div style="padding-left: 15px;">
+              ${Object.keys(groupedIssueLinks).map(issueLinkGroupHtml).join('')}
+            </div>
+          </div>
+        `}
       `;
     }
 
@@ -1175,11 +1422,24 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
       this._logUtils.error(err);
       this._uiUtils.showSnackbar(
-        '<pre style="background-color: white; border: none; color: red;">' +
+        '<pre style="background-color: white; border: none; color: red; margin: 0;">' +
           `<b>${this._uiUtils.escapeHtml(truncatedErrorMsg)}</b><br />` +
           '<small>(See the console for more details.)</small>' +
         '</pre>',
         10000);
+    }
+
+    _schedule(fn, delay) {
+      const cleanUpFn = () => clearTimeout(timeoutId);
+      const callback = () => {
+        const idx = this._cleanUpFns.indexOf(cleanUpFn);
+        if (idx !== -1) this._cleanUpFns.splice(idx, 1);
+
+        fn();
+      };
+
+      const timeoutId = setTimeout(callback, delay);
+      this._cleanUpFns.push(cleanUpFn);
     }
 
     _whileNotDestroyed(promise) {
@@ -1200,9 +1460,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       this._ready = this._init();
     }
 
-    cleanUp() {
-      /* Nothing to clean up. */
-    }
+    cleanUp() { /* Nothing to clean up. */ }
 
     async decrypt(encrypted) {
       await this._ready;
@@ -1326,6 +1584,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   class UiUtils {
     constructor() {
+      this.widgetUtils = new WidgetUtils();
+
       this._openDialogDeferreds = [];
 
       this._popup = null;
@@ -1374,6 +1634,17 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       while (this._openDialogDeferreds.length) {
         this._openDialogDeferreds.pop().reject(cleaningUpMarker);
       }
+    }
+
+    copyToClipboard(text) {
+      const textarea = document.createElement('textarea');
+      document.body.appendChild(textarea);
+      textarea.textContent = text;
+      textarea.select();
+      const success = document.execCommand('copy');
+      document.body.removeChild(textarea);
+
+      if (!success) throw new Error('Copying to clipboard failed.');
     }
 
     escapeHtml(html) {
@@ -1474,30 +1745,12 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           user-select: text;
         `,
       });
-      Object.assign(dialog.querySelector('.nsl-dialog-btn-ok'), {
-        onclick: () => deferred.resolve(true),
-        onmouseenter: evt => evt.target.style.borderColor = 'orange',
-        onmouseleave: evt => evt.target.style.borderColor = 'white',
-        style: `
-          background-color: green;
-          border: 2px solid white;
-          border-radius: 6px;
-          color: white;
-          margin-right: 15px;
-          padding: 10px 15px;
-        `,
-      });
-      Object.assign(dialog.querySelector('.nsl-dialog-btn-cancel'), {
-        onclick: () => deferred.resolve(false),
-        onmouseenter: evt => evt.target.style.borderColor = 'orange',
-        onmouseleave: evt => evt.target.style.borderColor = 'white',
-        style: `
-          background-color: gray;
-          border: 2px solid white;
-          border-radius: 6px;
-          color: white;
-          padding: 10px 15px;
-        `,
+      this.widgetUtils.asButton(
+        this.widgetUtils.withStyles(dialog.querySelector('.nsl-dialog-btn-ok'), {marginRight: '15px'}), 'green', {
+          click: () => deferred.resolve(true),
+        });
+      this.widgetUtils.asButton(dialog.querySelector('.nsl-dialog-btn-cancel'), 'gray', {
+        click: () => deferred.resolve(false),
       });
 
       const deferred = new this._DialogDeferred(dialog);
@@ -1716,6 +1969,107 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         window.requestAnimationFrame(() =>
           this._withRafInterval(actions).then(resolve, reject));
       });
+    }
+  }
+
+  class UpdateUtils {
+    constructor(ghUtils) {
+      this._owner = 'gkalpak';
+      this._repo = 'ng-slack-linkifier';
+      this._versionRe = /^\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?$/;
+
+      this._ghUtils = ghUtils;
+    }
+
+    async checkForUpdate(currentVersion) {
+      /*
+       * Do not prompt for updates, if the current version is not available (e.g. during development).
+       * (Do not use the version placeholder string directly to avoid having it replaced at build time.)
+       */
+      if (/^X\.Y\.Z-VERSION$/.test(currentVersion)) return;
+      if (!this._versionRe.test(currentVersion)) {
+        throw new Error(`Invalid current version format: ${currentVersion} (expected: X.Y.Z[-(alpha|beta|rc).K])`);
+      }
+
+      const latestVersion = await this._getLatestVersion();
+      const latestVersionUrl = latestVersion && this._getDownloadUrl(latestVersion);
+      const needsUpdate = latestVersion && (this._compareVersions(currentVersion, latestVersion) === -1);
+
+      return needsUpdate && {
+        version: latestVersion,
+        url: latestVersionUrl,
+        code: await window.fetch(latestVersionUrl).then(res => res.text()),
+      };
+    }
+
+    cleanUp() { /* Nothing to clean up. */ }
+
+    _compareVersions(v1, v2) {
+      const a1 = v1.split(/[.-]/);
+      const a2 = v2.split(/[.-]/);
+
+      for (let i = 0, ii = a1.length; i < ii; ++i) {
+        if (a2.length === i) return -1;
+
+        const p1 = isNaN(a1[i]) ? a1[i] : Number(a1[i]);
+        const p2 = isNaN(a2[i]) ? a2[i] : Number(a2[i]);
+
+        if (p1 < p2) return -1;
+        if (p1 > p2) return 1;
+      }
+
+      return (a1.length < a2.length) ? 1 : 0;
+    }
+
+    _getDownloadUrl(version) {
+      return `https://cdn.jsdelivr.net/gh/${this._owner}/${this._repo}@${version}/dist/index.min.js`;
+    }
+
+    async _getLatestVersion() {
+      const tag = await this._ghUtils.getLatestTag(this._owner, this._repo);
+      const version = tag && tag.name.slice(1);
+      return (version && this._versionRe.test(version)) ? version : undefined;
+    }
+  }
+
+  class WidgetUtils {
+    asButton(node, color, listeners = {}) {
+      this.withListeners(this.withListeners(node, listeners), {
+        mouseenter: evt => evt.target.style.borderColor = 'orange',
+        mouseleave: evt => evt.target.style.borderColor = 'white',
+      });
+
+      return this.withStyles(node, {
+        backgroundColor: color,
+        border: '2px solid white',
+        borderRadius: '6px',
+        color: 'white',
+        padding: '10px 15px',
+      });
+    }
+
+    asButtonLink(node, listeners = {}) {
+      this.withListeners(this.withListeners(node, listeners), {
+        mouseenter: evt => evt.target.style.color = 'orange',
+        mouseleave: evt => evt.target.style.color = null,
+      });
+
+      return this.withStyles(node, {textDecoration: 'underline'});
+    }
+
+    withListeners(node, listenersObj) {
+      Object.keys(listenersObj).forEach(event => {
+        const listener = (typeof listenersObj[event] === 'string') ?
+          new Function('event', listenersObj[event]) :
+          listenersObj[event];
+        node.addEventListener(event, listener);
+      });
+      return node;
+    }
+
+    withStyles(node, stylesObj) {
+      Object.assign(node.style, stylesObj);
+      return node;
     }
   }
 
