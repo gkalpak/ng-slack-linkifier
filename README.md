@@ -77,15 +77,18 @@ Things I want to (but won't necessarily) do:
   - Option 1: White-list `https://angular-team.slack.com` (ref: https://confluence.atlassian.com/adminjiraserver071/configuring-the-whitelist-802593145.html).
   - Option 2: Roll our own version of `cors-anywhere`.
 
-- Try out `DomUtils` and see if size/ergonomics improve.
-  - Consider having a "library" of re-usable components and/or templates (e.g. button, text-field, etc.).
-- Show more info for PRs (e.g. first try `.../pulls/<number>` and if it fails then `.../issues/<number>`?
-- Aid in writing messages (e.g. offer auto-complete suggestions for GitHub issues/PRs and Jira issues).
+- Show more info for PRs (e.g. first try `.../pulls/<number>` and if it fails then `.../issues/<number>` or the other way around)?
+  - Note: `.../pulls/` contains `closed: true, merged: true` for PRs (while they just appear as `closed` on `.../issues/`).
 - Recognize, shorten and show info for more GitHub URLs.
   - More PR URL formats (e.g. `/files`?, `/commits/...`?, `#issuecomment-12345` (and similar forms)?).
   - More commit URLs (e.g. `#diff...`?).
   - File URLs (e.g. https://github.com/angular/angular/blob/84be7c52d/path/to/file.ext#L13-L37).
-  - Jason's `https://git.io/fjLYY/12345` shortened URLs.
+  - Jason's `https://git.io/fjLYY/12345` shortened URLs?
+- Try out `DomUtils` and see if size/ergonomics improve.
+  - Consider having a "library" of re-usable components and/or templates (e.g. button, text-field, etc.).
+- Aid in writing messages (e.g. offer auto-complete suggestions for GitHub issues/PRs and Jira issues).
+- Consider protecting access tokens with a user-provided password (instead of a hard-coded one).
+  - Users would be requested to enter the password to "unlock" the tokens, when needed.
 - Consider auto-update functionality (to make updates seemless). E.g. implementation:
   - Store `index.js` as a non-bookmarklet script.
   - Have a separate bookmarklet file, which:
