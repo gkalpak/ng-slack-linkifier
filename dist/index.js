@@ -1,5 +1,5 @@
 javascript:/* eslint-disable-line no-unused-labels *//*
- * # NgSlackLinkifier v0.3.1
+ * # NgSlackLinkifier v0.3.2
  *
  * ## What it does
  *
@@ -58,7 +58,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   /* Constants */
   const NAME = 'NgSlackLinkifier';
-  const VERSION = '0.3.1';
+  const VERSION = '0.3.2';
 
   const CLASS_GITHUB_COMMIT_LINK = 'nsl-github-commit';
   const CLASS_GITHUB_ISSUE_LINK = 'nsl-github-issue';
@@ -174,7 +174,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     static get TOKEN_NAME() { return 'GitHub access token'; }
     static get TOKEN_DESCRIPTION_HTML() {
       const tokenName = this.TOKEN_NAME;
-      const tokenUrl = 'https://github.com/settings/tokens';
+      const tokenUrl = 'https://github.com/settings/tokens/new';
+
       return `
         <p>
           A ${tokenName} can be used to make authenticated requests to GitHub's API, when retrieving info for links to
@@ -182,10 +183,9 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           5000 vs 60 for anonymous requests).
         </p>
         <p>
-          To create a ${tokenName} visit: <a href="${tokenUrl}" target="_blank">${tokenUrl}</a>
+          To create a ${tokenName} visit: <a href="${tokenUrl}?description=${NAME}" target="_blank">${tokenUrl}</a>
           <i>(no scopes required)</i>
         </p>
-        <p>Providing a ${tokenName} is <b>optional</b>.</p>
       `;
     }
 
@@ -350,7 +350,6 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           <b>not supported</b> by Jira's API, so you will not be able to see any info without providing a ${tokenName}.
         </p>
         <p>To create a Jira access token visit: <a href="${tokenUrl}" target="_blank">${tokenUrl}</a></p>
-        <p>Providing a ${tokenName} is <b>optional</b> (unless you want to see issue info in here).</p>
         <br />
         <p style="
               background-color: rgba(255, 0, 0, 0.1);
