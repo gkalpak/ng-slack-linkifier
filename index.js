@@ -1852,6 +1852,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       this._insertContent(
         Object.assign(snackbar.querySelector('.nsl-snackbar-content'), {
           style: `
+            flex: auto;
             overflow: auto;
             padding: 10px 5px 10px 10px;
             user-select: text;
