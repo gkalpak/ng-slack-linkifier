@@ -1,5 +1,5 @@
 javascript:/* eslint-disable-line no-unused-labels *//*
- * # NgSlackLinkifier v0.3.3
+ * # NgSlackLinkifier v0.3.4
  *
  * ## What it does
  *
@@ -58,7 +58,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   /* Constants */
   const NAME = 'NgSlackLinkifier';
-  const VERSION = '0.3.3';
+  const VERSION = '0.3.4';
 
   const CLASS_GITHUB_COMMIT_LINK = 'nsl-github-commit';
   const CLASS_GITHUB_ISSUE_LINK = 'nsl-github-issue';
@@ -915,7 +915,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
               <p><b>New version of ${NAME} available: v${update.version}</b></p>
               <p>
                 <a class="nsl-update-btn-open" href="${update.url}" target="_blank">See the code</a> or
-                <a class="nsl-update-btn-copy" href="">copy it to clipboard</a>.
+                <a class="nsl-update-btn-copy">copy it to clipboard</a>.
               </p>
             </section>
           `,
@@ -923,10 +923,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         this._uiUtils.widgetUtils.asButtonLink(snackbarContent.querySelector('.nsl-update-btn-open'));
         this._uiUtils.widgetUtils.asButtonLink(
           this._uiUtils.widgetUtils.withListeners(snackbarContent.querySelector('.nsl-update-btn-copy'), {
-            click: evt => {
+            click: () => {
               try {
-                evt.preventDefault();
-
                 this._uiUtils.copyToClipboard(update.code);
                 this._uiUtils.showSnackbar(`
                   <div style="color: green;">
@@ -1854,6 +1852,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       this._insertContent(
         Object.assign(snackbar.querySelector('.nsl-snackbar-content'), {
           style: `
+            flex: auto;
             overflow: auto;
             padding: 10px 5px 10px 10px;
             user-select: text;
