@@ -923,8 +923,10 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         this._uiUtils.widgetUtils.asButtonLink(snackbarContent.querySelector('.nsl-update-btn-open'));
         this._uiUtils.widgetUtils.asButtonLink(
           this._uiUtils.widgetUtils.withListeners(snackbarContent.querySelector('.nsl-update-btn-copy'), {
-            click: () => {
+            click: evt => {
               try {
+                evt.preventDefault();
+
                 this._uiUtils.copyToClipboard(update.code);
                 this._uiUtils.showSnackbar(`
                   <div style="color: green;">
