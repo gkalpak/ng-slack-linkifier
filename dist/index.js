@@ -1,5 +1,5 @@
 javascript:/* eslint-disable-line no-unused-labels *//*
- * # NgSlackLinkifier v0.3.2
+ * # NgSlackLinkifier v0.3.3
  *
  * ## What it does
  *
@@ -58,7 +58,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   /* Constants */
   const NAME = 'NgSlackLinkifier';
-  const VERSION = '0.3.2';
+  const VERSION = '0.3.3';
 
   const CLASS_GITHUB_COMMIT_LINK = 'nsl-github-commit';
   const CLASS_GITHUB_ISSUE_LINK = 'nsl-github-issue';
@@ -923,8 +923,10 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         this._uiUtils.widgetUtils.asButtonLink(snackbarContent.querySelector('.nsl-update-btn-open'));
         this._uiUtils.widgetUtils.asButtonLink(
           this._uiUtils.widgetUtils.withListeners(snackbarContent.querySelector('.nsl-update-btn-copy'), {
-            click: () => {
+            click: evt => {
               try {
+                evt.preventDefault();
+
                 this._uiUtils.copyToClipboard(update.code);
                 this._uiUtils.showSnackbar(`
                   <div style="color: green;">
