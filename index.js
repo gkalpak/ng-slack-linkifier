@@ -732,13 +732,27 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         const prevMatch = prev && (prev.nodeType === Node.TEXT_NODE) && /\[([^\]]+)]\(/.exec(prev.textContent);
 
         const next = prevMatch && link.nextSibling;
-        const nextMatch = next && (next.nodeType === Node.TEXT_NODE) && /\)/.exec(next.textContent);
+        const nextMatch = next ?
+          ((next.nodeType === Node.TEXT_NODE) && /\)/.exec(next.textContent)) :
+          /* Truncated link in message attachment (e.g. by GeekBot). Requires special handling. */
+          (link.lastChild && (link.lastChild.textContent === '…') && true);
 
         if (nextMatch) {
-          prev.textContent = prev.textContent.slice(0, -prevMatch[0].length);
-          next.textContent = next.textContent.slice(nextMatch[0].length);
+          link.childNodes.forEach(n => n.textContent = '');
+          link.appendChild(Object.assign(document.createElement('b'), {textContent: prevMatch[1]}));
 
-          link.innerHTML = `<b>${prevMatch[1]}</b>`;
+          prev.textContent = prev.textContent.slice(0, -prevMatch[0].length);
+          if (next) {
+            next.textContent = next.textContent.slice(nextMatch[0].length);
+          } else {
+            /*
+             * Special handling: Prevent Slack to update the link's text content,
+             * when expanding/collapsing the message attachment.
+             */
+            const originalAppendChild = link.appendChild;
+            link.appendChild = n => originalAppendChild.call(link, Object.assign(n, {textContent: ''}));
+          }
+
           processedNodes.add(link);
         }
       });
