@@ -7,20 +7,17 @@ _Use at your own risk!_
 
 ## Description
 
-A script to enhance messages, especially links, in the `angular-team` Slack. See the doc comment in
-[index.js][index] for more details.
+A script to enhance messages, especially links, in the `angular-team` Slack. See the doc comment in [index.js][index] for more details.
 
 
 ## Usage
 
-The script should be run in the context of the [Slack web-app][slack]. For example, you can paste and and run the code
-in DevTools or use it as a [bookmarklet].
+The script should be run in the context of the [Slack web-app][slack]. For example, you can paste and and run the code in DevTools or use it as a [bookmarklet].
 
-If you are using the desktop app for Slack, you need to [start the app in a special way][slack-app-dev] in order to be
-able to open DevTools.
+If you are using the desktop app for Slack, you need to [start the app in a special way][slack-app-dev] in order to be able to open DevTools.
 
 The latest release can be found [here][releases].<br />
-The code for each release is in the corresponding commit's [dist/][dist] directory.
+The code for each release is in the corresponding commit's [dist/][dist] directory.<br />
 The code is also available at `https://cdn.jsdelivr.net/gh/gkalpak/ng-slack-linkifier@X.Y.Z/dist/index[.min].js`.
 
 > WARNING:
@@ -73,10 +70,6 @@ This comment is a good starting point for manual testing:
 
 Things I want to (but won't necessarily) do:
 
-- Handle the fact that Jira info cannot be retrieved with use of [cors-anywhere](https://cors-anywhere.herokuapp.com/).
-  - Option 1: White-list `https://angular-team.slack.com` (ref: https://confluence.atlassian.com/adminjiraserver071/configuring-the-whitelist-802593145.html).
-  - Option 2: Roll our own version of `cors-anywhere`.
-
 - Show more info for PRs (e.g. first try `.../pulls/<number>` and if it fails then `.../issues/<number>` or the other way around)?
   - Note: `.../pulls/` contains `closed: true, merged: true` for PRs (while they just appear as `closed` on `.../issues/`).
 - Recognize, shorten and show info for more GitHub URLs.
@@ -84,18 +77,55 @@ Things I want to (but won't necessarily) do:
   - More commit URLs (e.g. `#diff...`?).
   - File URLs (e.g. https://github.com/angular/angular/blob/84be7c52d/path/to/file.ext#L13-L37).
   - Jason's `https://git.io/fjLYY/12345` shortened URLs?
+
+- Handle the fact that Jira info cannot be retrieved with use of [cors-anywhere](https://cors-anywhere.herokuapp.com/).
+  - Option 1: White-list `https://angular-team.slack.com` (ref: https://confluence.atlassian.com/adminjiraserver071/configuring-the-whitelist-802593145.html) in Jira settings.
+  - Option 2: Roll our own version of `cors-anywhere`.
+  - Option 3: We might be able to bypass this, via a Chrome extension APIs (if this is turned into a Chrome extension).
+  - Option 4: Keep using `cors-anywhere`.
+
 - Try out `DomUtils` and see if size/ergonomics improve.
   - Consider having a "library" of re-usable components and/or templates (e.g. button, text-field, etc.).
+  - <details>
+      <summary>Example implementation</summary>
+
+      ```
+      const camelToKebabCase = str => str.
+        replace(/[A-Z]/g, m => `-${m}`);
+      const cssStyle = obj => Object.
+        keys(obj).
+        map(key => `${camelToKebabCase(key)}: ${obj[key]};`).
+        join(' ');
+      const domListeners = obj => Object.
+        keys(obj).
+        reduce((aggr, event) => ({
+          ...aggr,
+          [`on${event}`]: (typeof obj[event] !== 'string') ? obj[event] : new Function('event', obj[event]),
+        }), {});
+      const updateElement = (elem, classes, styles, listeners) =>
+        Object.assign(elem, {
+          className: classes && classes.join(' '),
+          style: styles && cssStyle(styles),
+          ...(listeners && domListeners(listeners)),
+        });
+      const createElement = (tagWithClasses, styles, listeners, children) => {
+        const [tag, ...classes] = tagWithClasses.split('.');
+        const elem = updateElement(document.createElement(tag || 'div'), classes, styles, listeners);
+        children && children.forEach(child =>
+          elem.appendChild((typeof child !== 'string') ? child : document.createTextNode(child)));
+        return elem;
+      };
+      ```
+    </details>
 - Aid in writing messages (e.g. offer auto-complete suggestions for GitHub issues/PRs and Jira issues).
 - Consider protecting access tokens with a user-provided password (instead of a hard-coded one).
   - Users would be requested to enter the password to "unlock" the tokens, when needed.
 - Consider auto-update functionality (to make updates seemless). E.g. implementation:
   - Store `index.js` as a non-bookmarklet script.
   - Have a separate bookmarklet file, which:
-    - Checks for code stored code (e.g. in `IndexedDB`).
+    - Checks for stored code (e.g. in `IndexedDB`).
       - If available, loads and runs it.
-      - If not avilable, looks up the latest tag on GitHub, downloads the corresponding version from jsDelivr, stores it
-        (e.g. in `IndexeddB`) and runs it.
+      - If not available, looks up the latest tag on GitHub, downloads the corresponding version from jsDelivr, stores  it (e.g. in `IndexeddB`) and runs it.
       - Potentially, include a version of the code in the bookmarklet file as fallback.
     - When an update is available: Download from jsDelivr, store for future access (e.g. in `IndexedDB`) and run it.
 
