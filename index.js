@@ -834,7 +834,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         this._ghUtils.setToken(await this._getStoredTokenFor(GithubUtils));
         this._jiraUtils.setToken(await this._getStoredTokenFor(JiraUtils));
 
-        const root = document.querySelector('#client_body');
+        const root = this._getRootElement();
+
         this._linkifier.processAll([root], true);
         this._linkifier.observe(root);
         this._postInstall();
@@ -1295,6 +1296,17 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           </div>
         `}
       `;
+    }
+
+    _getRootElement() {
+      const rootSelector = '.p-workspace, #client_body';
+      const rootElem = document.querySelector(rootSelector);
+
+      if (!rootElem) {
+        throw new Error(`Unable to find root element matching selector '${rootSelector}'.`);
+      }
+
+      return rootElem;
     }
 
     async _getStoredTokenFor(providerClass) {
