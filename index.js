@@ -958,6 +958,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
         this._uiUtils.showSnackbar(snackbarContent, -1);
       } catch (err) {
+        if (err instanceof CleaningUpMarkerError) return;
+
         /*
          * Checking for updates is not a critical operation.
          * Just log the error and move on (hoping the error is temporary).
