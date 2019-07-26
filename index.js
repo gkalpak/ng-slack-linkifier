@@ -918,7 +918,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       try {
         this._logUtils.log('Checking for updates...');
 
-        this._schedule(() => this._checkForUpdate(), 1000 * 60 * 60 * 24 * 2);
+        this._schedule(() => this._checkForUpdate(), 1000 * 60 * 60 * 24 * 1);  /* Check once a day. */
         const update = await this._whileNotDestroyed(this._updateUtils.checkForUpdate(VERSION));
 
         if (!update) return this._logUtils.log('No updates available.');
