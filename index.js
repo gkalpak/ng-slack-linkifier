@@ -843,6 +843,9 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         this._logUtils.log('Installed.');
       } catch (err) {
         this._onError(err);
+      } finally {
+        /* Even if installation failed, check for updates so that we can recover from a broken version. */
+        this._schedule(() => this._checkForUpdate(), 10000);
       }
     }
 
@@ -1486,7 +1489,6 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       }
 
       this._uiUtils.showSnackbar(snackbarContent, 5000);
-      this._schedule(() => this._checkForUpdate(), 10000);
     }
 
     _schedule(fn, delay) {
