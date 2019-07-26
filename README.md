@@ -76,7 +76,6 @@ Things I want to (but won't necessarily) do:
   - More PR URL formats (e.g. `/files`?, `/commits/...`?, `#issuecomment-12345` (and similar forms)?).
   - More commit URLs (e.g. `#diff...`?).
   - File URLs (e.g. https://github.com/angular/angular/blob/84be7c52d/path/to/file.ext#L13-L37).
-  - Jason's `https://git.io/fjLYY/12345` shortened URLs?
 
 - Handle the fact that Jira info cannot be retrieved with use of [cors-anywhere](https://cors-anywhere.herokuapp.com/).
   - Option 1: White-list `https://angular-team.slack.com` (ref: https://confluence.atlassian.com/adminjiraserver071/configuring-the-whitelist-802593145.html) in Jira settings.
@@ -86,10 +85,8 @@ Things I want to (but won't necessarily) do:
 
 - Try out `DomUtils` and see if size/ergonomics improve.
   - Consider having a "library" of re-usable components and/or templates (e.g. button, text-field, etc.).
-  - <details>
-      <summary>Example implementation</summary>
-
-      ```
+  - <details><summary>Example implementation</summary>
+      ```js
       const camelToKebabCase = str => str.
         replace(/[A-Z]/g, m => `-${m}`);
       const cssStyle = obj => Object.
@@ -125,7 +122,7 @@ Things I want to (but won't necessarily) do:
   - Have a separate bookmarklet file, which:
     - Checks for stored code (e.g. in `IndexedDB`).
       - If available, loads and runs it.
-      - If not available, looks up the latest tag on GitHub, downloads the corresponding version from jsDelivr, stores  it (e.g. in `IndexeddB`) and runs it.
+      - If not available, looks up the latest tag on GitHub, downloads the corresponding version from jsDelivr, stores  it (e.g. in `IndexedDB`) and runs it.
       - Potentially, include a version of the code in the bookmarklet file as fallback.
     - When an update is available: Download from jsDelivr, store for future access (e.g. in `IndexedDB`) and run it.
 
