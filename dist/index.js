@@ -1,5 +1,5 @@
 javascript:/* eslint-disable-line no-unused-labels *//*
- * # NgSlackLinkifier v0.3.6
+ * # NgSlackLinkifier v0.3.7
  *
  * ## What it does
  *
@@ -58,7 +58,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   /* Constants */
   const NAME = 'NgSlackLinkifier';
-  const VERSION = '0.3.6';
+  const VERSION = '0.3.7';
 
   const CLASS_GITHUB_COMMIT_LINK = 'nsl-github-commit';
   const CLASS_GITHUB_ISSUE_LINK = 'nsl-github-issue';
@@ -843,6 +843,9 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         this._logUtils.log('Installed.');
       } catch (err) {
         this._onError(err);
+      } finally {
+        /* Even if installation failed, check for updates so that we can recover from a broken version. */
+        this._schedule(() => this._checkForUpdate(), 10000);
       }
     }
 
@@ -915,7 +918,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       try {
         this._logUtils.log('Checking for updates...');
 
-        this._schedule(() => this._checkForUpdate(), 1000 * 60 * 60 * 24 * 2);
+        this._schedule(() => this._checkForUpdate(), 1000 * 60 * 60 * 24 * 1);  /* Check once a day. */
         const update = await this._whileNotDestroyed(this._updateUtils.checkForUpdate(VERSION));
 
         if (!update) return this._logUtils.log('No updates available.');
@@ -927,23 +930,25 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           innerHTML: `
             <header style="font-size: 0.75em; opacity: 0.5;"><p>${NAME} v${VERSION}</p></header>
             <section style="color: ${color};">
-              <p><b>New version of ${NAME} available: v${update.version}</b></p>
-              <p>
+              <div><b>New version of ${NAME} available: v${update.version}</b></div>
+              <div>
                 <a class="nsl-update-btn-open" href="${update.url}" target="_blank">See the code</a> or
-                <a class="nsl-update-btn-copy">copy it to clipboard</a>.
-              </p>
+                <a class="nsl-update-btn-copy" href="">copy it to clipboard</a>.
+              </div>
             </section>
           `,
         });
         this._uiUtils.widgetUtils.asButtonLink(snackbarContent.querySelector('.nsl-update-btn-open'));
         this._uiUtils.widgetUtils.asButtonLink(
           this._uiUtils.widgetUtils.withListeners(snackbarContent.querySelector('.nsl-update-btn-copy'), {
-            click: () => {
+            click: evt => {
               try {
+                evt.preventDefault();
+
                 this._uiUtils.copyToClipboard(update.code);
                 this._uiUtils.showSnackbar(`
                   <div style="color: green;">
-                    <p><b>Code for v${update.version} successfully copied to clipboard.</b></p>
+                    <div><b>Code for v${update.version} successfully copied to clipboard.</b></div>
                     <small>(Hopefully you know what to do 🙂)</small>
                   </div>
                 `, 5000);
@@ -955,6 +960,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
         this._uiUtils.showSnackbar(snackbarContent, -1);
       } catch (err) {
+        if (err instanceof CleaningUpMarkerError) return;
+
         /*
          * Checking for updates is not a critical operation.
          * Just log the error and move on (hoping the error is temporary).
@@ -1486,7 +1493,6 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       }
 
       this._uiUtils.showSnackbar(snackbarContent, 5000);
-      this._schedule(() => this._checkForUpdate(), 10000);
     }
 
     _schedule(fn, delay) {
@@ -1895,7 +1901,6 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           border: none;
           color: lightgray;
           cursor: pointer;
-          margin-top: -5px;
           padding: 5px;
         `,
       });
