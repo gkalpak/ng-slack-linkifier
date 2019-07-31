@@ -1241,7 +1241,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
             </span>
           </span>
           <span style="align-items: center; flex: auto; display: flex; margin-right: 15px;">
-            <img src="${!info.assignee ? '' : info.assignee.avatar}" width="25" height="25"
+            <img src="${!info.assignee ? UiUtils.EMPTY_IMAGE_SRC : info.assignee.avatar}" width="25" height="25"
                 style="border-radius: 6px; margin-right: 5px;" />
             <span style="flex-direction: column; display: flex;">
               <small style="color: gray;">Assigned to:</small>
@@ -1367,15 +1367,14 @@ javascript:/* eslint-disable-line no-unused-labels *//*
               <div style="align-items: center; display: flex; position: relative;">
                 <input
                     type="password"
+                    class="nsl-input-token-value"
                     placeholder="(required)"
                     value="${ctx.token}"
                     style="margin: 0;"
-                    oninput="javascript:window['${ctxName}'].token = event.target.value;"
                     />
                 <span
-                    style="cursor: pointer; font-size: 2em; position: absolute; right: 10px;"
-                    onmousedown="javascript:event.target.previousElementSibling.type = 'text';"
-                    onmouseup="javascript:event.target.previousElementSibling.type = 'password';">
+                    class="nsl-input-addon-token-value"
+                    style="cursor: pointer; font-size: 2em; position: absolute; right: 10px;">
                   👁️
                 </span>
               </div>
@@ -1383,10 +1382,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
             <label style="cursor: default; display: block; margin-bottom: 10px;">
               Store:
               <div style="align-items: center; display: flex; position: relative;">
-                <select
-                    value="${ctx.store}"
-                    style="cursor: pointer;"
-                    onchange="javascript:window['${ctxName}'].storage = event.target.value;">
+                <select class="nsl-input-token-store" value="${ctx.store}" style="cursor: pointer;">
                   <option value="local">Permanently (for this browser)</option>
                   <option value="session">Only for current session</option>
                 </select>
@@ -1406,8 +1402,26 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       `;
 
       try {
+        const widgetUtils = this._uiUtils.widgetUtils;
+        const dialogContent = Object.assign(document.createElement('div'), {innerHTML: dialogTemplate});
+
+        const tokenValueField = dialogContent.querySelector('.nsl-input-token-value');
+        const tokenValueFieldAddon = dialogContent.querySelector('.nsl-input-addon-token-value');
+        const tokenStoreField = dialogContent.querySelector('.nsl-input-token-store');
+
+        widgetUtils.withListeners(widgetUtils.asInputField(tokenValueField), {
+          input: () => ctx.token = tokenValueField.value,
+        });
+        widgetUtils.withListeners(tokenValueFieldAddon, {
+          mousedown: () => tokenValueField.type = 'text',
+          mouseup: () => tokenValueField.type = 'password',
+        });
+        widgetUtils.withListeners(widgetUtils.asInputField(tokenStoreField), {
+          change: () => ctx.storage = tokenStoreField.value,
+        });
+
         const ok = await this._uiUtils.
-          showDialog(dialogTemplate, 'Store token', 'Not now').
+          showDialog(dialogContent, 'Store token', 'Not now').
           finally(() => delete window[ctxName]);
 
         if (!ok) return;
@@ -1649,6 +1663,10 @@ javascript:/* eslint-disable-line no-unused-labels *//*
   }
 
   class UiUtils {
+    static get EMPTY_IMAGE_SRC() {
+      return 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==';
+    }
+
     constructor() {
       this.widgetUtils = new WidgetUtils();
 
@@ -2121,6 +2139,17 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       });
 
       return this.withStyles(node, {textDecoration: 'underline'});
+    }
+
+    asInputField(node) {
+      return this.withStyles(node, {
+        border: '1px solid lightgray',
+        borderRadius: '6px',
+        outline: 'none',
+        padding: '15px',
+        WebkitAppearance: 'textfield',
+        width: '100%',
+      });
     }
 
     withListeners(node, listenersObj) {
