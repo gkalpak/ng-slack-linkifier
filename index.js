@@ -729,11 +729,12 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
       node.querySelectorAll(`a:not(.${CLASS_PROCESSED})`).forEach(link => {
         const prev = link.previousSibling;
-        const prevMatch = prev && (prev.nodeType === Node.TEXT_NODE) && /\[([^\]]+)]\(/.exec(prev.textContent);
+        const prevMatch = prev && (prev.nodeType === Node.TEXT_NODE) &&
+          /\[([^[\]]+|[^[]*(?:\[[^\]]+][^[]*)*)]\($/.exec(prev.textContent);
 
         const next = prevMatch && link.nextSibling;
         const nextMatch = next ?
-          ((next.nodeType === Node.TEXT_NODE) && /\)/.exec(next.textContent)) :
+          ((next.nodeType === Node.TEXT_NODE) && /^\)/.exec(next.textContent)) :
           /* Truncated link in message attachment (e.g. by GeekBot). Requires special handling. */
           (link.lastChild && (link.lastChild.textContent === '…') && true);
 
