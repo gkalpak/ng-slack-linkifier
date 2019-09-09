@@ -1,5 +1,5 @@
 javascript:/* eslint-disable-line no-unused-labels *//*
- * # NgSlackLinkifier v0.3.8
+ * # NgSlackLinkifier v0.3.9
  *
  * ## What it does
  *
@@ -58,7 +58,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   /* Constants */
   const NAME = 'NgSlackLinkifier';
-  const VERSION = '0.3.8';
+  const VERSION = '0.3.9';
 
   const CLASS_GITHUB_COMMIT_LINK = 'nsl-github-commit';
   const CLASS_GITHUB_ISSUE_LINK = 'nsl-github-issue';
@@ -729,11 +729,12 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
       node.querySelectorAll(`a:not(.${CLASS_PROCESSED})`).forEach(link => {
         const prev = link.previousSibling;
-        const prevMatch = prev && (prev.nodeType === Node.TEXT_NODE) && /\[([^\]]+)]\(/.exec(prev.textContent);
+        const prevMatch = prev && (prev.nodeType === Node.TEXT_NODE) &&
+          /\[([^[\]]+|[^[]*(?:\[[^\]]+][^[]*)*)]\($/.exec(prev.textContent);
 
         const next = prevMatch && link.nextSibling;
         const nextMatch = next ?
-          ((next.nodeType === Node.TEXT_NODE) && /\)/.exec(next.textContent)) :
+          ((next.nodeType === Node.TEXT_NODE) && /^\)/.exec(next.textContent)) :
           /* Truncated link in message attachment (e.g. by GeekBot). Requires special handling. */
           (link.lastChild && (link.lastChild.textContent === '…') && true);
 
