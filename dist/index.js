@@ -1,5 +1,5 @@
 javascript:/* eslint-disable-line no-unused-labels *//*
- * # NgSlackLinkifier v0.3.9
+ * # NgSlackLinkifier v0.3.10
  *
  * ## What it does
  *
@@ -58,7 +58,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   /* Constants */
   const NAME = 'NgSlackLinkifier';
-  const VERSION = '0.3.9';
+  const VERSION = '0.3.10';
 
   const CLASS_GITHUB_COMMIT_LINK = 'nsl-github-commit';
   const CLASS_GITHUB_ISSUE_LINK = 'nsl-github-issue';
@@ -501,8 +501,10 @@ javascript:/* eslint-disable-line no-unused-labels *//*
        * - `.c-message__body`: Normal messages.
        * - `.c-message_attachment__body`: Attachments (e.g. posted by GeekBot in #fw-standup).
        * - `.c-message_kit__text`: Thread messages.
+       * - `.p-rich_text_section`: Messages with rich-text support (whatever that is that differentiates them from
+       *                           normal messages).
        */
-      const selectors = '.c-message__body, .c-message_attachment__body, .c-message_kit__text';
+      const selectors = '.c-message__body, .c-message_attachment__body, .c-message_kit__text, .p-rich_text_section';
       const processedParents = new Set();
 
       nodes.forEach(n => {
