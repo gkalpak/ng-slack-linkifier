@@ -1,5 +1,5 @@
 javascript:/* eslint-disable-line no-unused-labels *//*
- * # NgSlackLinkifier v0.3.10
+ * # NgSlackLinkifier v0.3.11
  *
  * ## What it does
  *
@@ -58,7 +58,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   /* Constants */
   const NAME = 'NgSlackLinkifier';
-  const VERSION = '0.3.10';
+  const VERSION = '0.3.11';
 
   const CLASS_GITHUB_COMMIT_LINK = 'nsl-github-commit';
   const CLASS_GITHUB_ISSUE_LINK = 'nsl-github-issue';
@@ -202,7 +202,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           sha: data.sha,
           message: data.commit.message,
           author: this._extractUserInfo(data.author),
-          committer: this._extractUserInfo(data.committer),
+          committer: data.commiter && this._extractUserInfo(data.committer),
           authorDate: new Date(data.commit.author.date),
           committerDate: new Date(data.commit.committer.date),
           stats: data.stats,
