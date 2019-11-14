@@ -202,7 +202,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           sha: data.sha,
           message: data.commit.message,
           author: this._extractUserInfo(data.author),
-          committer: this._extractUserInfo(data.committer),
+          committer: data.commiter && this._extractUserInfo(data.committer),
           authorDate: new Date(data.commit.author.date),
           committerDate: new Date(data.commit.committer.date),
           stats: data.stats,
