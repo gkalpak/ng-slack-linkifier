@@ -1,5 +1,5 @@
 javascript:/* eslint-disable-line no-unused-labels *//*
- * # NgSlackLinkifier v0.3.11
+ * # NgSlackLinkifier v0.3.12
  *
  * ## What it does
  *
@@ -10,7 +10,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
  * - URLs to GitHub commits to short links. E.g.:
  *   - `https://github.com/angular/angular/commit/a1b2c3d4e5` --> `angular@a1b2c3d4e5`
  *   - `https://github.com/angular/angular-cli/commit/b2c3d4e5f6` --> `angular-cli@b2c3d4e5f6`
- *   - `https://github.com/not-angular/some-lib/commit/c3d4e5f6g7` --> `not-angular/some-lib@c3d4e5f6g7`
+ *   - `https://github.com/not-angular/some-lib/commit/c3d4e5f` --> `not-angular/some-lib@c3d4e5f`
  *
  * - GitHub commits of the format `[<owner>/]<repo>@<sha>` to links. If omitted `<owner>` defaults to `angular`. In
  *   order for commits to be recognized at least the first 7 characters of the SHA must be provided. E.g.:
@@ -19,7 +19,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
  *   - `angular-cli@b2c3d4e5f6` or `angular/angular-cli@b2c3d4e5f6` -->
  *     `[`angular-cli@b2c3d4e`](https://github.com/angular/angular-cli/commit/b2c3d4e5f6)`
  *   - `not-angular/some-lib@c3d4e5f6` -->
- *     `[not-angular/some-lib@c3d4e5f](https://github.com/not-angular/some-lib/commit/c3d4e5f6`
+ *     `[not-angular/some-lib@c3d4e5f](https://github.com/not-angular/some-lib/commit/c3d4e5f6)`
  *
  * - URLs to GitHub issues/PRs to short links. E.g.:
  *   - `https://github.com/angular/angular/issues/12345` --> `#12345`
@@ -58,7 +58,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   /* Constants */
   const NAME = 'NgSlackLinkifier';
-  const VERSION = '0.3.11';
+  const VERSION = '0.3.12';
 
   const CLASS_GITHUB_COMMIT_LINK = 'nsl-github-commit';
   const CLASS_GITHUB_ISSUE_LINK = 'nsl-github-issue';
@@ -128,16 +128,26 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       return response;
     }
 
-    _getJson(url) {
+    async _getJson(url) {
       let response = this._getFromCache(url);
 
       if (!response) {
-        response = window.fetch(url, {headers: {Accept: 'application/json', ...this._headers}}).
-          then(async res => res.ok ? res.json() : Promise.reject(await this._getErrorForResponse(res))).
-          catch(err => {
-            if (this._getFromCache(url) === response) this._cache.delete(url);
-            throw err;
-          });
+        try {
+          const res = await window.fetch(url, {headers: {Accept: 'application/json', ...this._headers}});
+
+          if (!res.ok) {
+            const error = await this._getErrorForResponse(res);
+            throw error;
+          }
+
+          response = {
+            headers: res.headers,
+            data: await res.json(),
+          };
+        } catch (err) {
+          if (this._getFromCache(url) === response) this._cache.delete(url);
+          throw err;
+        }
 
         this._cache.set(url, {date: Date.now(), response});
       }
@@ -195,10 +205,13 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       this._rateLimitResetTime = 0;
     }
 
-    getCommitInfo(owner, repo, commit) {
-      const url = `${this._baseUrl}/${owner}/${repo}/commits/${commit}`;
-      return this._getJson(url).
-        then(data => ({
+    async getCommitInfo(owner, repo, commit) {
+      try {
+        const url = `${this._baseUrl}/${owner}/${repo}/commits/${commit}`;
+        const {data} = await this._getJson(url);
+        const {files, stats} = this._extractFileInfo(data.files);
+
+        return {
           sha: data.sha,
           message: data.commit.message,
           author: this._extractUserInfo(data.author),
@@ -206,36 +219,64 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           authorDate: new Date(data.commit.author.date),
           committerDate: new Date(data.commit.committer.date),
           stats: data.stats,
-          files: data.files.map(f => this._extractFileInfo(f)),
-        })).
-        catch(err => {
-          throw this._wrapError(err, `Error getting GitHub info for ${owner}/${repo}@${commit}:`);
-        });
+          files,
+          filesUrl: data.html_url,
+          /*
+           * GitHub seems to send the first 300 files, but there is no direct way to tell whether there are more files.
+           * Try to infer that by comparing the total changes in `data.stats` and in `data.files`.
+           */
+          hasMoreFiles: data.stats.total !== stats.total,
+        };
+      } catch (err) {
+        throw this._wrapError(err, `Error getting GitHub info for ${owner}/${repo}@${commit}:`);
+      }
     }
 
-    getIssueInfo(owner, repo, number) {
-      const url = `${this._baseUrl}/${owner}/${repo}/issues/${number}`;
-      return this._getJson(url).
-        then(data => ({
+    async getIssueInfo(owner, repo, number) {
+      try {
+        const url = `${this._baseUrl}/${owner}/${repo}/issues/${number}`;
+        const {data} = await this._getJson(url);
+        const isPr = data.hasOwnProperty('pull_request');
+        let prInfo = null;
+
+        if (isPr) {
+          const prFilesUrl = `${this._baseUrl}/${owner}/${repo}/pulls/${number}/files?per_page=50`;
+          const {headers, data: rawFiles} = await this._getJson(prFilesUrl);
+          const {files, stats} = this._extractFileInfo(rawFiles);
+
+          prInfo = {
+            stats,
+            files,
+            filesUrl: `${data.html_url}/files`,
+            hasMoreFiles: headers.has('link'),
+          };
+        }
+
+        return {
           number: data.number,
           title: data.title,
           description: data.body.trim(),
           author: this._extractUserInfo(data.user),
           state: data.state,
           labels: data.labels.map(l => l.name).sort(),
-          isPr: data.html_url.endsWith(`/pull/${data.number}`),
-        })).
-        catch(err => {
-          throw this._wrapError(err, `Error getting GitHub info for ${owner}/${repo}#${number}:`);
-        });
+          isPr,
+          prInfo,
+        };
+      } catch (err) {
+        throw this._wrapError(err, `Error getting GitHub info for ${owner}/${repo}#${number}:`);
+      }
     }
 
-    getLatestTag(owner, repo) {
-      /* Tags are listed in reverse order. */
-      const url = `${this._baseUrl}/${owner}/${repo}/tags?per_page=1`;
-      return this._getJson(url).
-        then(data => data[0]).
-        catch(err => { throw this._wrapError(err, `Error getting latest GitHub tag ${owner}/${repo}:`); });
+    async getLatestTag(owner, repo) {
+      try {
+        /* Tags are listed in reverse order. */
+        const url = `${this._baseUrl}/${owner}/${repo}/tags?per_page=1`;
+        const {data} = await this._getJson(url);
+
+        return data[0];
+      } catch (err) {
+        throw this._wrapError(err, `Error getting latest GitHub tag ${owner}/${repo}:`);
+      }
     }
 
     requiresToken() {
@@ -243,17 +284,28 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         `Anonymous rate-limit reached (until ${new Date(this._rateLimitResetTime).toLocaleString()})`;
     }
 
-    _extractFileInfo(file) {
-      return {
-        filename: file.filename,
-        patch: file.patch,
-        status: file.status,
-        stats: {
-          total: file.changes,
-          additions: file.additions,
-          deletions: file.deletions,
-        },
-      };
+    _extractFileInfo(rawFiles) {
+      const stats = {total: 0, additions: 0, deletions: 0};
+      const files = rawFiles.map(f => {
+        const fileStats = {
+          total: f.changes,
+          additions: f.additions,
+          deletions: f.deletions,
+        };
+
+        stats.total += fileStats.total;
+        stats.additions += fileStats.additions;
+        stats.deletions += fileStats.deletions;
+
+        return {
+          filename: f.filename,
+          patch: f.patch,
+          status: f.status,
+          stats: fileStats,
+        };
+      });
+
+      return {files, stats};
     }
 
     _extractUserInfo(user) {
@@ -395,12 +447,13 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       this._baseUrl = `https://cors-anywhere.herokuapp.com/${this._baseUrl}`;
     }
 
-    getIssueInfo(number) {
-      const url = `${this._baseUrl}/issue/${number}?expand=renderedFields&` +
-        'fields=assignee,description,fixVersions,issuelinks,issuetype,project,reporter,status,summary';
+    async getIssueInfo(number) {
+      try {
+        const url = `${this._baseUrl}/issue/${number}?expand=renderedFields&` +
+          'fields=assignee,description,fixVersions,issuelinks,issuetype,project,reporter,status,summary';
+        const data = await this._getJson(url);
 
-      return this._getJson(url).
-        then(data => ({
+        return {
           number: data.key,
           type: data.fields.issuetype.name,
           title: data.fields.summary,
@@ -413,8 +466,10 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           issueLinks: data.fields.issuelinks.
             map(x => this._extractIssueLinkInfo(x)).
             sort((a, b) => this._sortIssueLinks(a, b)),
-        })).
-        catch(err => { throw this._wrapError(err, `Error getting Jira info for ${number}:`); });
+        };
+      } catch (err) {
+        throw this._wrapError(err, `Error getting Jira info for ${number}:`);
+      }
     }
 
     requiresToken() { return !this.hasToken() && 'Unauthenticated requests are not supported.'; }
@@ -1005,8 +1060,6 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       const requiresTokenContent = this._checkRequiresToken(this._ghUtils);
       if (requiresTokenContent) return requiresTokenContent;
 
-      const colorPerStatus = {added: 'green', modified: 'darkorchid', removed: 'red', renamed: 'blue'};
-
       const owner = data.nslOwner;
       const repo = data.nslRepo;
       const commit = data.nslCommit;
@@ -1015,9 +1068,44 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       const subject = info.message.split('\n', 1).pop();
       const body = info.message.slice(subject.length).trim();
 
-      const fileHtml = file => {
-        const tooltip = file.patch.replace(/"/g, '&quot;').replace(/\n/g, '\u000A');
-        const diff =   file.patch.
+      return `
+        <p style="
+              align-items: center;
+              border-bottom: 1px solid lightgray;
+              display: flex;
+              font-size: 0.9em;
+              padding-bottom: 8px;
+            ">
+          <span style="flex: auto; margin-right: 15px;">
+            <img src="${info.author.avatar}" width="25" height="25" style="border-radius: 6px;" />
+            <a href="${info.author.url}" target="_blank">@${info.author.username}</a>
+          </span>
+          <small style="color: gray; text-align: right;">
+            Committed on: ${info.committerDate.toLocaleString()}
+          </small>
+        </p>
+        <p style="align-items: center; display: flex; font-size: 1.25em;">
+          <b style="flex: auto;">${subject}</b>
+          <span style="color: gray; margin-left: 30px;">@${info.sha.slice(0, 7)}</span>
+        </p>
+        <pre style="margin-top: 24px;">${body || '<i>No body.</i>'}</pre>
+        ${this._getPopupContentForGithubFiles(info.files, info.stats, info.hasMoreFiles, info.filesUrl)}
+      `;
+    }
+
+    _getPopupContentForGithubFiles(files, totalStats, hasMoreFiles, filesUrl) {
+      const colorPerStatus = {added: 'green', modified: 'darkorchid', removed: 'red', renamed: 'blue'};
+
+      const fileToHtml = file => {
+        const escapedHtml = file.patch.
+          replace(/&/g, '&amp;').
+          replace(/'/g, '&apos;').
+          replace(/"/g, '&quot;').
+          replace(/</g, '&lt;').
+          replace(/>/g, '&gt;');
+
+        const tooltip = escapedHtml.replace(/\n/g, '\u000A');
+        const diff =   escapedHtml.
           split('\n').
           map(l => {
             const style = l.startsWith('+') ?
@@ -1051,53 +1139,45 @@ javascript:/* eslint-disable-line no-unused-labels *//*
               <span style="flex: auto; white-space: nowrap;">
                 ${file.filename}
               </span>
-              <small style="text-align: right; white-space: nowrap;">
-                <span style="color: ${colorPerStatus.added}; display: inline-block; min-width: 33px;">
-                  +${file.stats.additions}
-                </span>
-                <span style="color: ${colorPerStatus.removed}; display: inline-block; min-width: 33px;">
-                  -${file.stats.deletions}
-                </span>
-              </small>
+              ${statToHtml(file.stats)}
             </summary>
             <pre style="font-size: 0.9em; line-height: calc(0.9em + 5px);">${diff}</pre>
           </details>
         `;
       };
+      const statToHtml = stats => `
+        <small style="text-align: right; white-space: nowrap;">
+          <span style="color: ${colorPerStatus.added}; display: inline-block; min-width: 33px;">
+            +${stats.additions}
+          </span>
+          <span style="color: ${colorPerStatus.removed}; display: inline-block; min-width: 33px;">
+            -${stats.deletions}
+          </span>
+        </small>
+      `;
 
       return `
-        <p style="
-              align-items: center;
-              border-bottom: 1px solid lightgray;
-              display: flex;
-              font-size: 0.9em;
-              padding-bottom: 8px;
-            ">
-          <span style="flex: auto; margin-right: 15px;">
-            <img src="${info.author.avatar}" width="25" height="25" style="border-radius: 6px;" />
-            <a href="${info.author.url}" target="_blank">@${info.author.username}</a>
-          </span>
-          <small style="color: gray; text-align: right;">
-            Committed on: ${info.committerDate.toLocaleString()}
-          </small>
-        </p>
-        <p style="align-items: center; display: flex; font-size: 1.25em;">
-          <b style="flex: auto;">${subject}</b>
-          <span style="color: gray; margin-left: 30px;">@${info.sha.slice(0, 7)}</span>
-        </p>
-        <pre style="margin-top: 24px;">${body || '<i>No body.</i>'}</pre>
         <hr />
         <div>
-          <p style="display: flex;">
-            <b style="flex: auto;">Files (${info.files.length}):</b>
-            <small style="color: lightgray;">Click on a file to see diff.</small>
+          <p style="display: flex; justify-content: space-between;">
+            <b>Files (${files.length}):</b>
+            <small style="color: lightgray;">Click on a file to see the diff.</small>
+            <span>${statToHtml(totalStats)}</span>
           </p>
           <div style="overflow: auto;">
             <div style="display: flex; flex-direction: column; width: fit-content;">
-              ${info.files.map(fileHtml).join('')}
+              ${files.map(fileToHtml).join('')}
             </div>
           </div>
         </div>
+        ${!hasMoreFiles ? '' : `
+          <p style="text-align: center;">
+            <i style="color: gray;">
+              ...Only showing the first ${files.length} files -
+              <a href="${filesUrl}" target="_blank">see all of them on GitHub</a>...
+            </i>
+          </p>
+        `}
       `;
     }
 
@@ -1112,7 +1192,12 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       const number = data.nslNumber;
 
       const info = await this._ghUtils.getIssueInfo(owner, repo, number);
+      const prInfo = info.prInfo;
       const description = info.description.replace(/^<!--[^]*?-->\s*/, '');
+
+      const filesContent = !info.isPr ?
+        '' :
+        this._getPopupContentForGithubFiles(prInfo.files, prInfo.stats, prInfo.hasMoreFiles, prInfo.filesUrl);
 
       return `
         <p style="
@@ -1159,6 +1244,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           </span>
         </p>
         <pre style="margin-top: 24px;">${description || '<i style="color: gray;">No description.</i>'}</pre>
+        ${filesContent}
       `;
     }
 
