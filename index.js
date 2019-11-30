@@ -128,16 +128,23 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       return response;
     }
 
-    _getJson(url) {
+    async _getJson(url) {
       let response = this._getFromCache(url);
 
       if (!response) {
-        response = window.fetch(url, {headers: {Accept: 'application/json', ...this._headers}}).
-          then(async res => res.ok ? res.json() : Promise.reject(await this._getErrorForResponse(res))).
-          catch(err => {
-            if (this._getFromCache(url) === response) this._cache.delete(url);
-            throw err;
-          });
+        try {
+          const res = await window.fetch(url, {headers: {Accept: 'application/json', ...this._headers}});
+
+          if (!res.ok) {
+            const error = await this._getErrorForResponse(res);
+            throw error;
+          }
+
+          response = await res.json();
+        } catch (err) {
+          if (this._getFromCache(url) === response) this._cache.delete(url);
+          throw err;
+        }
 
         this._cache.set(url, {date: Date.now(), response});
       }
@@ -195,10 +202,12 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       this._rateLimitResetTime = 0;
     }
 
-    getCommitInfo(owner, repo, commit) {
-      const url = `${this._baseUrl}/${owner}/${repo}/commits/${commit}`;
-      return this._getJson(url).
-        then(data => ({
+    async getCommitInfo(owner, repo, commit) {
+      try {
+        const url = `${this._baseUrl}/${owner}/${repo}/commits/${commit}`;
+        const data = await this._getJson(url);
+
+        return {
           sha: data.sha,
           message: data.commit.message,
           author: this._extractUserInfo(data.author),
@@ -207,16 +216,18 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           committerDate: new Date(data.commit.committer.date),
           stats: data.stats,
           files: data.files.map(f => this._extractFileInfo(f)),
-        })).
-        catch(err => {
-          throw this._wrapError(err, `Error getting GitHub info for ${owner}/${repo}@${commit}:`);
-        });
+        };
+      } catch (err) {
+        throw this._wrapError(err, `Error getting GitHub info for ${owner}/${repo}@${commit}:`);
+      }
     }
 
-    getIssueInfo(owner, repo, number) {
-      const url = `${this._baseUrl}/${owner}/${repo}/issues/${number}`;
-      return this._getJson(url).
-        then(data => ({
+    async getIssueInfo(owner, repo, number) {
+      try {
+        const url = `${this._baseUrl}/${owner}/${repo}/issues/${number}`;
+        const data = await this._getJson(url);
+
+        return {
           number: data.number,
           title: data.title,
           description: data.body.trim(),
@@ -224,18 +235,22 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           state: data.state,
           labels: data.labels.map(l => l.name).sort(),
           isPr: data.html_url.endsWith(`/pull/${data.number}`),
-        })).
-        catch(err => {
-          throw this._wrapError(err, `Error getting GitHub info for ${owner}/${repo}#${number}:`);
-        });
+        };
+      } catch (err) {
+        throw this._wrapError(err, `Error getting GitHub info for ${owner}/${repo}#${number}:`);
+      }
     }
 
-    getLatestTag(owner, repo) {
-      /* Tags are listed in reverse order. */
-      const url = `${this._baseUrl}/${owner}/${repo}/tags?per_page=1`;
-      return this._getJson(url).
-        then(data => data[0]).
-        catch(err => { throw this._wrapError(err, `Error getting latest GitHub tag ${owner}/${repo}:`); });
+    async getLatestTag(owner, repo) {
+      try {
+        /* Tags are listed in reverse order. */
+        const url = `${this._baseUrl}/${owner}/${repo}/tags?per_page=1`;
+        const data = await this._getJson(url);
+
+        return data[0];
+      } catch (err) {
+        throw this._wrapError(err, `Error getting latest GitHub tag ${owner}/${repo}:`);
+      }
     }
 
     requiresToken() {
@@ -395,12 +410,13 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       this._baseUrl = `https://cors-anywhere.herokuapp.com/${this._baseUrl}`;
     }
 
-    getIssueInfo(number) {
-      const url = `${this._baseUrl}/issue/${number}?expand=renderedFields&` +
-        'fields=assignee,description,fixVersions,issuelinks,issuetype,project,reporter,status,summary';
+    async getIssueInfo(number) {
+      try {
+        const url = `${this._baseUrl}/issue/${number}?expand=renderedFields&` +
+          'fields=assignee,description,fixVersions,issuelinks,issuetype,project,reporter,status,summary';
+        const data = await this._getJson(url);
 
-      return this._getJson(url).
-        then(data => ({
+        return {
           number: data.key,
           type: data.fields.issuetype.name,
           title: data.fields.summary,
@@ -413,8 +429,10 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           issueLinks: data.fields.issuelinks.
             map(x => this._extractIssueLinkInfo(x)).
             sort((a, b) => this._sortIssueLinks(a, b)),
-        })).
-        catch(err => { throw this._wrapError(err, `Error getting Jira info for ${number}:`); });
+        };
+      } catch (err) {
+        throw this._wrapError(err, `Error getting Jira info for ${number}:`);
+      }
     }
 
     requiresToken() { return !this.hasToken() && 'Unauthenticated requests are not supported.'; }
