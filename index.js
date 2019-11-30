@@ -1078,8 +1078,15 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       const colorPerStatus = {added: 'green', modified: 'darkorchid', removed: 'red', renamed: 'blue'};
 
       const fileToHtml = file => {
-        const tooltip = file.patch.replace(/"/g, '&quot;').replace(/\n/g, '\u000A');
-        const diff =   file.patch.
+        const escapedHtml = file.patch.
+          replace(/&/g, '&amp;').
+          replace(/'/g, '&apos;').
+          replace(/"/g, '&quot;').
+          replace(/</g, '&lt;').
+          replace(/>/g, '&gt;');
+
+        const tooltip = escapedHtml.replace(/\n/g, '\u000A');
+        const diff =   escapedHtml.
           split('\n').
           map(l => {
             const style = l.startsWith('+') ?
