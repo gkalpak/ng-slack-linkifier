@@ -206,6 +206,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       try {
         const url = `${this._baseUrl}/${owner}/${repo}/commits/${commit}`;
         const data = await this._getJson(url);
+        const {files, stats} = this._extractFileInfo(data.files);
 
         return {
           sha: data.sha,
@@ -215,7 +216,13 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           authorDate: new Date(data.commit.author.date),
           committerDate: new Date(data.commit.committer.date),
           stats: data.stats,
-          files: data.files.map(f => this._extractFileInfo(f)),
+          files,
+          filesUrl: data.html_url,
+          /*
+           * GitHub seems to send the first 300 files, but there is no direct way to tell whether there are more files.
+           * Try to infer that by comparing the total changes in `data.stats` and in `data.files`.
+           */
+          hasMoreFiles: data.stats.total !== stats.total,
         };
       } catch (err) {
         throw this._wrapError(err, `Error getting GitHub info for ${owner}/${repo}@${commit}:`);
@@ -258,17 +265,28 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         `Anonymous rate-limit reached (until ${new Date(this._rateLimitResetTime).toLocaleString()})`;
     }
 
-    _extractFileInfo(file) {
-      return {
-        filename: file.filename,
-        patch: file.patch,
-        status: file.status,
-        stats: {
-          total: file.changes,
-          additions: file.additions,
-          deletions: file.deletions,
-        },
-      };
+    _extractFileInfo(rawFiles) {
+      const stats = {total: 0, additions: 0, deletions: 0};
+      const files = rawFiles.map(f => {
+        const fileStats = {
+          total: f.changes,
+          additions: f.additions,
+          deletions: f.deletions,
+        };
+
+        stats.total += fileStats.total;
+        stats.additions += fileStats.additions;
+        stats.deletions += fileStats.deletions;
+
+        return {
+          filename: f.filename,
+          patch: f.patch,
+          status: f.status,
+          stats: fileStats,
+        };
+      });
+
+      return {files, stats};
     }
 
     _extractUserInfo(user) {
@@ -1052,11 +1070,11 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           <span style="color: gray; margin-left: 30px;">@${info.sha.slice(0, 7)}</span>
         </p>
         <pre style="margin-top: 24px;">${body || '<i>No body.</i>'}</pre>
-        ${this._getPopupContentForGithubFiles(info.files, info.stats)}
+        ${this._getPopupContentForGithubFiles(info.files, info.stats, info.hasMoreFiles, info.filesUrl)}
       `;
     }
 
-    _getPopupContentForGithubFiles(files, totalStats) {
+    _getPopupContentForGithubFiles(files, totalStats, hasMoreFiles, filesUrl) {
       const colorPerStatus = {added: 'green', modified: 'darkorchid', removed: 'red', renamed: 'blue'};
 
       const fileToHtml = file => {
@@ -1126,6 +1144,14 @@ javascript:/* eslint-disable-line no-unused-labels *//*
             </div>
           </div>
         </div>
+        ${!hasMoreFiles ? '' : `
+          <p style="text-align: center;">
+            <i style="color: gray;">
+              ...Only showing the first ${files.length} files -
+              <a href="${filesUrl}" target="_blank">see all of them on GitHub</a>...
+            </i>
+          </p>
+        `}
       `;
     }
 
