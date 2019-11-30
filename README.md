@@ -70,8 +70,6 @@ This comment is a good starting point for manual testing:
 
 Things I want to (but won't necessarily) do:
 
-- Show more info for PRs (e.g. first try `.../pulls/<number>` and if it fails then `.../issues/<number>` or the other way around)?
-  - Note: `.../pulls/` contains `closed: true, merged: true` for PRs (while they just appear as `closed` on `.../issues/`).
 - Recognize, shorten and show info for more GitHub URLs.
   - More PR URL formats (e.g. `/files`?, `/commits/...`?, `#issuecomment-12345` (and similar forms)?).
   - More commit URLs (e.g. `#diff...`?).

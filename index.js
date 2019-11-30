@@ -140,7 +140,10 @@ javascript:/* eslint-disable-line no-unused-labels *//*
             throw error;
           }
 
-          response = await res.json();
+          response = {
+            headers: res.headers,
+            data: await res.json(),
+          };
         } catch (err) {
           if (this._getFromCache(url) === response) this._cache.delete(url);
           throw err;
@@ -205,7 +208,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     async getCommitInfo(owner, repo, commit) {
       try {
         const url = `${this._baseUrl}/${owner}/${repo}/commits/${commit}`;
-        const data = await this._getJson(url);
+        const {data} = await this._getJson(url);
         const {files, stats} = this._extractFileInfo(data.files);
 
         return {
@@ -232,7 +235,22 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     async getIssueInfo(owner, repo, number) {
       try {
         const url = `${this._baseUrl}/${owner}/${repo}/issues/${number}`;
-        const data = await this._getJson(url);
+        const {data} = await this._getJson(url);
+        const isPr = data.hasOwnProperty('pull_request');
+        let prInfo = null;
+
+        if (isPr) {
+          const prFilesUrl = `${this._baseUrl}/${owner}/${repo}/pulls/${number}/files?per_page=50`;
+          const {headers, data: rawFiles} = await this._getJson(prFilesUrl);
+          const {files, stats} = this._extractFileInfo(rawFiles);
+
+          prInfo = {
+            stats,
+            files,
+            filesUrl: `${data.html_url}/files`,
+            hasMoreFiles: headers.has('link'),
+          };
+        }
 
         return {
           number: data.number,
@@ -241,7 +259,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           author: this._extractUserInfo(data.user),
           state: data.state,
           labels: data.labels.map(l => l.name).sort(),
-          isPr: data.html_url.endsWith(`/pull/${data.number}`),
+          isPr,
+          prInfo,
         };
       } catch (err) {
         throw this._wrapError(err, `Error getting GitHub info for ${owner}/${repo}#${number}:`);
@@ -252,7 +271,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       try {
         /* Tags are listed in reverse order. */
         const url = `${this._baseUrl}/${owner}/${repo}/tags?per_page=1`;
-        const data = await this._getJson(url);
+        const {data} = await this._getJson(url);
 
         return data[0];
       } catch (err) {
@@ -1173,7 +1192,12 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       const number = data.nslNumber;
 
       const info = await this._ghUtils.getIssueInfo(owner, repo, number);
+      const prInfo = info.prInfo;
       const description = info.description.replace(/^<!--[^]*?-->\s*/, '');
+
+      const filesContent = !info.isPr ?
+        '' :
+        this._getPopupContentForGithubFiles(prInfo.files, prInfo.stats, prInfo.hasMoreFiles, prInfo.filesUrl);
 
       return `
         <p style="
@@ -1220,6 +1244,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           </span>
         </p>
         <pre style="margin-top: 24px;">${description || '<i style="color: gray;">No description.</i>'}</pre>
+        ${filesContent}
       `;
     }
 
