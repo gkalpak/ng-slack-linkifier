@@ -1,5 +1,5 @@
 javascript:/* eslint-disable-line no-unused-labels *//*
- * # NgSlackLinkifier v0.3.12
+ * # NgSlackLinkifier v0.3.13
  *
  * ## What it does
  *
@@ -58,7 +58,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   /* Constants */
   const NAME = 'NgSlackLinkifier';
-  const VERSION = '0.3.12';
+  const VERSION = '0.3.13';
 
   const CLASS_GITHUB_COMMIT_LINK = 'nsl-github-commit';
   const CLASS_GITHUB_ISSUE_LINK = 'nsl-github-issue';
@@ -79,7 +79,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
     static validateToken(token) {
       if (!token || (typeof token !== 'string')) {
-        throw new Error(`Empty or invalid token (${typeof token}: ${token}). Please, provide an non-empty string.`);
+        throw new Error(`Empty or invalid token (${typeof token}: ${token}). Please, provide a non-empty string.`);
       }
     }
 
@@ -129,30 +129,22 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     async _getJson(url) {
-      let response = this._getFromCache(url);
+      let responsePromise = this._getFromCache(url);
 
-      if (!response) {
-        try {
-          const res = await window.fetch(url, {headers: {Accept: 'application/json', ...this._headers}});
+      if (!responsePromise) {
+        responsePromise = window.fetch(url, {headers: {Accept: 'application/json', ...this._headers}}).
+          then(async res => res.ok ?
+            {data: await res.json(), headers: res.headers} :
+            Promise.reject(await this._getErrorForResponse(res))).
+          catch(err => {
+            if (this._getFromCache(url) === responsePromise) this._cache.delete(url);
+            throw err;
+          });
 
-          if (!res.ok) {
-            const error = await this._getErrorForResponse(res);
-            throw error;
-          }
-
-          response = {
-            headers: res.headers,
-            data: await res.json(),
-          };
-        } catch (err) {
-          if (this._getFromCache(url) === response) this._cache.delete(url);
-          throw err;
-        }
-
-        this._cache.set(url, {date: Date.now(), response});
+        this._cache.set(url, {date: Date.now(), response: responsePromise});
       }
 
-      return response;
+      return responsePromise;
     }
 
     _notImplemented() { throw new Error('Not implemented.'); }
@@ -451,7 +443,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       try {
         const url = `${this._baseUrl}/issue/${number}?expand=renderedFields&` +
           'fields=assignee,description,fixVersions,issuelinks,issuetype,project,reporter,status,summary';
-        const data = await this._getJson(url);
+        const {data} = await this._getJson(url);
 
         return {
           number: data.key,
