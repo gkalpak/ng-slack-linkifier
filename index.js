@@ -443,7 +443,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       try {
         const url = `${this._baseUrl}/issue/${number}?expand=renderedFields&` +
           'fields=assignee,description,fixVersions,issuelinks,issuetype,project,reporter,status,summary';
-        const data = await this._getJson(url);
+        const {data} = await this._getJson(url);
 
         return {
           number: data.key,
