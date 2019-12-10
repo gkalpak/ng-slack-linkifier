@@ -548,10 +548,10 @@ javascript:/* eslint-disable-line no-unused-labels *//*
        * - `.c-message__body`: Normal messages.
        * - `.c-message_attachment__body`: Attachments (e.g. posted by GeekBot in #fw-standup).
        * - `.c-message_kit__text`: Thread messages.
-       * - `.p-rich_text_section`: Messages with rich-text support (whatever that is that differentiates them from
-       *                           normal messages).
+       * - `.p-rich_text_block`: Messages with rich-text support (whatever that is that differentiates them from regular
+       *                         messages).
        */
-      const selectors = '.c-message__body, .c-message_attachment__body, .c-message_kit__text, .p-rich_text_section';
+      const selectors = '.c-message__body, .c-message_attachment__body, .c-message_kit__text, .p-rich_text_block';
       const processedParents = new Set();
 
       nodes.forEach(n => {
