@@ -2227,6 +2227,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         border: '2px solid white',
         borderRadius: '6px',
         color: 'white',
+        cursor: 'pointer',
         padding: '10px 15px',
       });
     }
@@ -2237,7 +2238,10 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         mouseleave: evt => evt.target.style.color = null,
       });
 
-      return this.withStyles(node, {textDecoration: 'underline'});
+      return this.withStyles(node, {
+        cursor: 'pointer',
+        textDecoration: 'underline',
+      });
     }
 
     asInputField(node) {
