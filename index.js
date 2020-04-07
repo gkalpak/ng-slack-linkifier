@@ -66,6 +66,9 @@ javascript:/* eslint-disable-line no-unused-labels *//*
   const CLASS_PROCESSED = 'nsl-processed';
   const CLASS_POST_PROCESSED = 'nsl-post-processed';
 
+  /* Helpers */
+  const hasOwnProperty = Object.prototype.hasOwnProperty.call.bind(Object.prototype.hasOwnProperty);
+
   /*
    * Encoded entities need to be broken up, so that they are not auto-decoded, when the script is used as a bookmarklet.
    * (NOTE: The used method for breaking up those entities should survive minification.)
@@ -228,7 +231,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       try {
         const url = `${this._baseUrl}/${owner}/${repo}/issues/${number}`;
         const {data} = await this._getJson(url);
-        const isPr = data.hasOwnProperty('pull_request');
+        const isPr = hasOwnProperty(data, 'pull_request');
         let prInfo = null;
 
         if (isPr) {
@@ -467,7 +470,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     requiresToken() { return !this.hasToken() && 'Unauthenticated requests are not supported.'; }
 
     _extractIssueLinkInfo(link) {
-      const isInward = link.hasOwnProperty('inwardIssue');
+      const isInward = hasOwnProperty(link, 'inwardIssue');
       const otherIssue = isInward ? link.inwardIssue : link.outwardIssue;
       return {
         type: isInward ? link.type.inward : link.type.outward,
