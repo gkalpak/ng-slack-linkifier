@@ -1,5 +1,5 @@
 javascript:/* eslint-disable-line no-unused-labels *//*
- * # NgSlackLinkifier v0.3.14
+ * # NgSlackLinkifier v0.3.15
  *
  * ## What it does
  *
@@ -58,13 +58,16 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   /* Constants */
   const NAME = 'NgSlackLinkifier';
-  const VERSION = '0.3.14';
+  const VERSION = '0.3.15';
 
   const CLASS_GITHUB_COMMIT_LINK = 'nsl-github-commit';
   const CLASS_GITHUB_ISSUE_LINK = 'nsl-github-issue';
   const CLASS_JIRA_LINK = 'nsl-jira';
   const CLASS_PROCESSED = 'nsl-processed';
   const CLASS_POST_PROCESSED = 'nsl-post-processed';
+
+  /* Helpers */
+  const hasOwnProperty = Object.prototype.hasOwnProperty.call.bind(Object.prototype.hasOwnProperty);
 
   /*
    * Encoded entities need to be broken up, so that they are not auto-decoded, when the script is used as a bookmarklet.
@@ -228,7 +231,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       try {
         const url = `${this._baseUrl}/${owner}/${repo}/issues/${number}`;
         const {data} = await this._getJson(url);
-        const isPr = data.hasOwnProperty('pull_request');
+        const isPr = hasOwnProperty(data, 'pull_request');
         let prInfo = null;
 
         if (isPr) {
@@ -291,7 +294,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
         return {
           filename: f.filename,
-          patch: f.patch,
+          patch: (f.patch === undefined) ? null : f.patch,
           status: f.status,
           stats: fileStats,
         };
@@ -467,7 +470,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     requiresToken() { return !this.hasToken() && 'Unauthenticated requests are not supported.'; }
 
     _extractIssueLinkInfo(link) {
-      const isInward = link.hasOwnProperty('inwardIssue');
+      const isInward = hasOwnProperty(link, 'inwardIssue');
       const otherIssue = isInward ? link.inwardIssue : link.outwardIssue;
       return {
         type: isInward ? link.type.inward : link.type.outward,
@@ -964,12 +967,13 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         () => link.removeEventListener('mouseleave', onMouseleave));
     }
 
-    async _checkForUpdate() {
+    async _checkForUpdate(ignoreVersion = false) {
       try {
         this._logUtils.log('Checking for updates...');
 
         this._schedule(() => this._checkForUpdate(), 1000 * 60 * 60 * 24 * 1);  /* Check once a day. */
-        const update = await this._whileNotDestroyed(this._updateUtils.checkForUpdate(VERSION));
+        const currentVersion = ignoreVersion ? '0.0.0' : VERSION;
+        const update = await this._whileNotDestroyed(this._updateUtils.checkForUpdate(currentVersion));
 
         if (!update) return this._logUtils.log('No updates available.');
 
@@ -1087,24 +1091,26 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
     _getPopupContentForGithubFiles(files, totalStats, hasMoreFiles, filesUrl) {
       const colorPerStatus = {added: 'green', modified: 'darkorchid', removed: 'red', renamed: 'blue'};
+      const tooLargeDiff = 'Diff too large to display...';
 
       const fileToHtml = file => {
-        const escapedHtml = file.patch.
+        const escapedHtml = (file.patch === null) ? tooLargeDiff : file.patch.
           replace(/&/g, '&amp;').
           replace(/'/g, '&apos;').
           replace(/"/g, '&quot;').
           replace(/</g, '&lt;').
           replace(/>/g, '&gt;');
 
-        const tooltip = escapedHtml.replace(/\n/g, '\u000A');
-        const diff =   escapedHtml.
+        const tooltip = escapedHtml.replace(/\n/g, '\u000A' /* LF */);
+        const diff = escapedHtml.
           split('\n').
           map(l => {
-            const style = l.startsWith('+') ?
-              'background-color: rgba(0, 255, 0, 0.11);' : l.startsWith('-') ?
-                'background-color: rgba(255, 0, 0, 0.11);' : l.startsWith('@@') ?
-                  'color: rgba(0, 0, 0, 0.33);' :
-                  'color: rgba(0, 0, 0, 0.66);';
+            const style = (l === tooLargeDiff) ?
+              'font-style: italic;' : l.startsWith('+') ?
+                'background-color: rgba(0, 255, 0, 0.11);' : l.startsWith('-') ?
+                  'background-color: rgba(255, 0, 0, 0.11);' : l.startsWith('@@') ?
+                    'color: rgba(0, 0, 0, 0.33);' :
+                    'color: rgba(0, 0, 0, 0.66);';
             return `<span style="${style}">${l}</span>`;
           }).
           join('\n');
@@ -1564,13 +1570,17 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
     _postInstall() {
       const hasTokens = [this._ghUtils, this._jiraUtils].some(provider => provider.hasToken());
+      const isDevVersion = this._updateUtils.isDevelopmentVersion(VERSION);
       const snackbarContent = Object.assign(document.createElement('div'), {
         innerHTML: `
           <b style="color: cornflowerblue;">${NAME} v${VERSION} is up and running 😎</b>
           ${!hasTokens ? '' : `
             <small style="color: gray; display: block; margin-top: 16px;">
               Available actions:
-              <a class="nsl-install-btn-clear-tokens">Clear stored tokens</a></li>
+              <ul style="margin-bottom: 0;">
+                <li><a class="nsl-install-btn-clear-tokens">Clear stored tokens</a></li>
+                ${!isDevVersion ? '' : '<li><a class="nsl-install-btn-cdn-update">Update from CDN</a></li>'}
+              </ul>
             </small>
           `}
         `,
@@ -1584,6 +1594,12 @@ javascript:/* eslint-disable-line no-unused-labels *//*
               this._uiUtils.showSnackbar('<b style="color: green;">Successfully removed stored tokens.</b>', 2000);
               evt.target.parentNode.remove();
             },
+          }));
+      }
+      if (isDevVersion) {
+        this._uiUtils.widgetUtils.asButtonLink(
+          this._uiUtils.widgetUtils.withListeners(snackbarContent.querySelector('.nsl-install-btn-cdn-update'), {
+            click: () => this._checkForUpdate(true),
           }));
       }
 
@@ -2003,13 +2019,18 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           padding: 5px;
         `,
       });
+      Object.assign(snackbar, {
+        isHovered: false,
+        onmouseenter: evt => evt.target.isHovered = true,
+        onmouseleave: evt => evt.target.isHovered = false,
+      });
 
       this._snackbarContainer.appendChild(snackbar);
       const fadeInPromise = this._fadeIn(snackbar);
 
       return (duration < 0) ? fadeInPromise : fadeInPromise.
         then(() => new Promise(resolve => setTimeout(resolve, duration))).
-        then(() => this._fadeOut(snackbar));
+        then(() => this._fadeOutOnceNotHovered(snackbar));
     }
 
     _animateProp(elem, prop, from, to, duration = 200) {
@@ -2100,6 +2121,18 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         then(() => elem.remove());
     }
 
+    _fadeOutOnceNotHovered(elem, duration) {
+      return new Promise((resolve, reject) => {
+        const doFadeOut = () => this._fadeOut(elem, duration).then(resolve, reject);
+
+        if (elem.isHovered) {
+          elem.addEventListener('mouseleave', doFadeOut);
+        } else {
+          doFadeOut();
+        }
+      });
+    }
+
     _insertContent(parentNode, htmlOrNode) {
       if (typeof htmlOrNode === 'string') {
         parentNode.innerHTML = htmlOrNode;
@@ -2147,11 +2180,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     async checkForUpdate(currentVersion) {
-      /*
-       * Do not prompt for updates, if the current version is not available (e.g. during development).
-       * (Do not use the version placeholder string directly to avoid having it replaced at build time.)
-       */
-      if (/^X\.Y\.Z-VERSION$/.test(currentVersion)) return;
+      /* Do not prompt for updates during development or if the current version and is not available. */
+      if (this.isDevelopmentVersion(currentVersion)) return;
       if (!this._versionRe.test(currentVersion)) {
         throw new Error(`Invalid current version format: ${currentVersion} (expected: X.Y.Z[-(alpha|beta|rc).K])`);
       }
@@ -2168,6 +2198,11 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     cleanUp() { /* Nothing to clean up. */ }
+
+    isDevelopmentVersion(version) {
+      /* Do not use the version placeholder string directly to avoid having it replaced at build time. */
+      return /^X\.Y\.Z-VERSION$/.test(version);
+    }
 
     _compareVersions(v1, v2) {
       const a1 = v1.split(/[.-]/);
@@ -2209,6 +2244,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         border: '2px solid white',
         borderRadius: '6px',
         color: 'white',
+        cursor: 'pointer',
         padding: '10px 15px',
       });
     }
@@ -2219,7 +2255,10 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         mouseleave: evt => evt.target.style.color = null,
       });
 
-      return this.withStyles(node, {textDecoration: 'underline'});
+      return this.withStyles(node, {
+        cursor: 'pointer',
+        textDecoration: 'underline',
+      });
     }
 
     asInputField(node) {
