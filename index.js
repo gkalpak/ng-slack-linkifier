@@ -2019,13 +2019,18 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           padding: 5px;
         `,
       });
+      Object.assign(snackbar, {
+        isHovered: false,
+        onmouseenter: evt => evt.target.isHovered = true,
+        onmouseleave: evt => evt.target.isHovered = false,
+      });
 
       this._snackbarContainer.appendChild(snackbar);
       const fadeInPromise = this._fadeIn(snackbar);
 
       return (duration < 0) ? fadeInPromise : fadeInPromise.
         then(() => new Promise(resolve => setTimeout(resolve, duration))).
-        then(() => this._fadeOut(snackbar));
+        then(() => this._fadeOutOnceNotHovered(snackbar));
     }
 
     _animateProp(elem, prop, from, to, duration = 200) {
@@ -2114,6 +2119,18 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     _fadeOut(elem, duration) {
       return this._animateProp(elem, 'opacity', 1, 0.1, duration).
         then(() => elem.remove());
+    }
+
+    _fadeOutOnceNotHovered(elem, duration) {
+      return new Promise((resolve, reject) => {
+        const doFadeOut = () => this._fadeOut(elem, duration).then(resolve, reject);
+
+        if (elem.isHovered) {
+          elem.addEventListener('mouseleave', doFadeOut);
+        } else {
+          doFadeOut();
+        }
+      });
     }
 
     _insertContent(parentNode, htmlOrNode) {
