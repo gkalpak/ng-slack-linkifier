@@ -294,7 +294,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
         return {
           filename: f.filename,
-          patch: f.patch,
+          patch: (f.patch === undefined) ? null : f.patch,
           status: f.status,
           stats: fileStats,
         };
@@ -1090,24 +1090,26 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
     _getPopupContentForGithubFiles(files, totalStats, hasMoreFiles, filesUrl) {
       const colorPerStatus = {added: 'green', modified: 'darkorchid', removed: 'red', renamed: 'blue'};
+      const tooLargeDiff = 'Diff too large to display...';
 
       const fileToHtml = file => {
-        const escapedHtml = file.patch.
+        const escapedHtml = (file.patch === null) ? tooLargeDiff : file.patch.
           replace(/&/g, '&amp;').
           replace(/'/g, '&apos;').
           replace(/"/g, '&quot;').
           replace(/</g, '&lt;').
           replace(/>/g, '&gt;');
 
-        const tooltip = escapedHtml.replace(/\n/g, '\u000A');
-        const diff =   escapedHtml.
+        const tooltip = escapedHtml.replace(/\n/g, '\u000A' /* LF */);
+        const diff = escapedHtml.
           split('\n').
           map(l => {
-            const style = l.startsWith('+') ?
-              'background-color: rgba(0, 255, 0, 0.11);' : l.startsWith('-') ?
-                'background-color: rgba(255, 0, 0, 0.11);' : l.startsWith('@@') ?
-                  'color: rgba(0, 0, 0, 0.33);' :
-                  'color: rgba(0, 0, 0, 0.66);';
+            const style = (l === tooLargeDiff) ?
+              'font-style: italic;' : l.startsWith('+') ?
+                'background-color: rgba(0, 255, 0, 0.11);' : l.startsWith('-') ?
+                  'background-color: rgba(255, 0, 0, 0.11);' : l.startsWith('@@') ?
+                    'color: rgba(0, 0, 0, 0.33);' :
+                    'color: rgba(0, 0, 0, 0.66);';
             return `<span style="${style}">${l}</span>`;
           }).
           join('\n');
