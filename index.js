@@ -967,12 +967,13 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         () => link.removeEventListener('mouseleave', onMouseleave));
     }
 
-    async _checkForUpdate() {
+    async _checkForUpdate(ignoreVersion = false) {
       try {
         this._logUtils.log('Checking for updates...');
 
         this._schedule(() => this._checkForUpdate(), 1000 * 60 * 60 * 24 * 1);  /* Check once a day. */
-        const update = await this._whileNotDestroyed(this._updateUtils.checkForUpdate(VERSION));
+        const currentVersion = ignoreVersion ? '0.0.0' : VERSION;
+        const update = await this._whileNotDestroyed(this._updateUtils.checkForUpdate(currentVersion));
 
         if (!update) return this._logUtils.log('No updates available.');
 
@@ -1569,13 +1570,17 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
     _postInstall() {
       const hasTokens = [this._ghUtils, this._jiraUtils].some(provider => provider.hasToken());
+      const isDevVersion = this._updateUtils.isDevelopmentVersion(VERSION);
       const snackbarContent = Object.assign(document.createElement('div'), {
         innerHTML: `
           <b style="color: cornflowerblue;">${NAME} v${VERSION} is up and running 😎</b>
           ${!hasTokens ? '' : `
             <small style="color: gray; display: block; margin-top: 16px;">
               Available actions:
-              <a class="nsl-install-btn-clear-tokens">Clear stored tokens</a></li>
+              <ul style="margin-bottom: 0;">
+                <li><a class="nsl-install-btn-clear-tokens">Clear stored tokens</a></li>
+                ${!isDevVersion ? '' : '<li><a class="nsl-install-btn-cdn-update">Update from CDN</a></li>'}
+              </ul>
             </small>
           `}
         `,
@@ -1589,6 +1594,12 @@ javascript:/* eslint-disable-line no-unused-labels *//*
               this._uiUtils.showSnackbar('<b style="color: green;">Successfully removed stored tokens.</b>', 2000);
               evt.target.parentNode.remove();
             },
+          }));
+      }
+      if (isDevVersion) {
+        this._uiUtils.widgetUtils.asButtonLink(
+          this._uiUtils.widgetUtils.withListeners(snackbarContent.querySelector('.nsl-install-btn-cdn-update'), {
+            click: () => this._checkForUpdate(true),
           }));
       }
 
@@ -2152,11 +2163,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     async checkForUpdate(currentVersion) {
-      /*
-       * Do not prompt for updates, if the current version is not available (e.g. during development).
-       * (Do not use the version placeholder string directly to avoid having it replaced at build time.)
-       */
-      if (/^X\.Y\.Z-VERSION$/.test(currentVersion)) return;
+      /* Do not prompt for updates during development or if the current version and is not available. */
+      if (this.isDevelopmentVersion(currentVersion)) return;
       if (!this._versionRe.test(currentVersion)) {
         throw new Error(`Invalid current version format: ${currentVersion} (expected: X.Y.Z[-(alpha|beta|rc).K])`);
       }
@@ -2173,6 +2181,11 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     cleanUp() { /* Nothing to clean up. */ }
+
+    isDevelopmentVersion(version) {
+      /* Do not use the version placeholder string directly to avoid having it replaced at build time. */
+      return /^X\.Y\.Z-VERSION$/.test(version);
+    }
 
     _compareVersions(v1, v2) {
       const a1 = v1.split(/[.-]/);
