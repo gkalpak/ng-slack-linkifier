@@ -1,5 +1,5 @@
 javascript:/* eslint-disable-line no-unused-labels *//*
- * # NgSlackLinkifier v0.3.15
+ * # NgSlackLinkifier v0.3.16
  *
  * ## What it does
  *
@@ -58,7 +58,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   /* Constants */
   const NAME = 'NgSlackLinkifier';
-  const VERSION = '0.3.15';
+  const VERSION = '0.3.16';
 
   const CLASS_GITHUB_COMMIT_LINK = 'nsl-github-commit';
   const CLASS_GITHUB_ISSUE_LINK = 'nsl-github-issue';
@@ -440,12 +440,18 @@ javascript:/* eslint-disable-line no-unused-labels *//*
        * TODO(gkalpak): Implement a more secure alternative.
        */
       this._baseUrl = `https://cors-anywhere.herokuapp.com/${this._baseUrl}`;
+
+      this._customFields = {
+        PrLink: 'customfield_10135',
+      };
     }
 
     async getIssueInfo(number) {
       try {
-        const url = `${this._baseUrl}/issue/${number}?expand=renderedFields&` +
-          'fields=assignee,description,fixVersions,issuelinks,issuetype,project,reporter,status,summary';
+        const url = `${this._baseUrl}/issue/${number}?` +
+          'expand=renderedFields&' +
+          'fields=assignee,description,fixVersions,issuelinks,issuetype,project,reporter,status,summary,' +
+            this._customFields.PrLink;
         const {data} = await this._getJson(url);
 
         return {
@@ -458,6 +464,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           status: this._extractStatusInfo(data.fields.status),
           project: data.fields.project.name,
           fixVersions: data.fields.fixVersions.map(x => x.name).sort(),
+          prLink: data.fields[this._customFields.PrLink],
           issueLinks: data.fields.issuelinks.
             map(x => this._extractIssueLinkInfo(x)).
             sort((a, b) => this._sortIssueLinks(a, b)),
@@ -1380,6 +1387,13 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         <pre style="margin-top: 24px; white-space: normal;">
           ${info.description || '<i style="color: gray;">No description.</i>'}
         </pre>
+        <hr />
+        <p>
+          <b>PR:</b>
+          ${!info.prLink ? '<i style="color: gray;">-</i>' : `
+            <a href="${info.prLink}" target="_blank">#${info.prLink.replace(/.*\/(\d+)$/, '$1')}</a>
+          `}
+        </p>
         ${!info.issueLinks.length ? '' : `
           <hr />
           <div>
