@@ -1,5 +1,5 @@
 javascript:/* eslint-disable-line no-unused-labels *//*
- * # NgSlackLinkifier v0.3.16
+ * # NgSlackLinkifier v0.3.17
  *
  * ## What it does
  *
@@ -58,7 +58,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   /* Constants */
   const NAME = 'NgSlackLinkifier';
-  const VERSION = '0.3.16';
+  const VERSION = '0.3.17';
 
   const CLASS_GITHUB_COMMIT_LINK = 'nsl-github-commit';
   const CLASS_GITHUB_ISSUE_LINK = 'nsl-github-issue';
@@ -1407,7 +1407,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     _getRootElement() {
-      const rootSelector = '.p-workspace, #client_body';
+      const rootSelector = '.p-workspace-layout, .p-workspace, #client_body';
       const rootElem = document.querySelector(rootSelector);
 
       if (!rootElem) {
