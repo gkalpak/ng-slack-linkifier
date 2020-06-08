@@ -1407,7 +1407,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
 
     _getRootElement() {
-      const rootSelector = '.p-workspace, #client_body';
+      const rootSelector = '.p-workspace-layout, .p-workspace, #client_body';
       const rootElem = document.querySelector(rootSelector);
 
       if (!rootElem) {
