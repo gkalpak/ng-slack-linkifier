@@ -19,7 +19,7 @@
     "postversion": "git push && git push --tags",
     "~~generate-dist": "node --eval \"require('shelljs/global'); set('-e'); mkdir('-p', 'dist/'); cp('index.js', 'dist/');\"",
     "post~~generate-dist": "node --eval \"require('shelljs/global'); set('-e'); sed('-i', /X\\.Y\\.Z-VERSION/g, process.env.npm_package_version, 'dist/index.js');\"",
-    "~~generate-dist-min": "terser dist/index.js --compress --ecma=8 --mangle --output=dist/index.min.js",
+    "~~generate-dist-min": "terser dist/index.js --compress --ecma=2019 --mangle --output=dist/index.min.js",
     "post~~generate-dist-min": "node --eval \"const p = 'dist/index.min.js'; fs.writeFileSync(p, 'javascript:' + fs.readFileSync(p));\""
   },
   "license": "Unlicense",
@@ -31,9 +31,9 @@
   },
   "dependencies": {},
   "devDependencies": {
-    "eslint": "^6.8.0",
+    "eslint": "^7.2.0",
     "npm-run-all": "^4.1.5",
-    "shelljs": "^0.8.3",
-    "terser": "^4.6.10"
+    "shelljs": "^0.8.4",
+    "terser": "^4.7.0"
   }
 }
