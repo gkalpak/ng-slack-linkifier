@@ -850,8 +850,15 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
       this._cleanUpables = [
         this._logUtils = new LogUtils(`${NAME} v${VERSION}`),
-        this._secretUtils = new SecretUtils(),
         this._storageUtils = new StorageUtils(NAME),
+
+        /*
+         * NOTE:
+         * The idea (for now) is to just make it difficult for someone to make sense of encrypted values they might get
+         * access to. E.g. those values could be stored on `window.localStorage` or `window.sessionStorage` and it won't
+         * be possible for someone to get to the underlying data without knowing about this code here.
+         */
+        this._secretUtils = new SecretUtils('$NgSl@ckL1nk1fy$'),
 
         this._linkifier = new Linkifier(node => this._addListeners(node)),
         this._uiUtils = new UiUtils(),
@@ -1639,22 +1646,22 @@ javascript:/* eslint-disable-line no-unused-labels *//*
   }
 
   class SecretUtils {
-    constructor() {
+    get ready() { return this._secretKey.then(() => this); }
+
+    constructor(password) {
       this._crypto = window.crypto.subtle;
       this._version = '1';
 
       this._decoder = new TextDecoder();
       this._encoder = new TextEncoder();
       this._algorithm = {name: 'AES-CBC', iv: this._encoder.encode('SupposedlyRandom')};
-      this._superSecretKey = null;
 
-      this._ready = this._init();
+      this._secretKey = this._init(password);
     }
 
     cleanUp() { /* Nothing to clean up. */ }
 
     async decrypt(encrypted) {
-      await this._ready;
       const [v, numbersStr, ...rest] = encrypted.split(':');
       const numbers = numbersStr && numbersStr.split(',').filter(Boolean).map(Number);
 
@@ -1664,29 +1671,32 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         throw new Error(`Unable to decrypt \`${encrypted}\`: Version mismatch (expected: ${this._version}).`);
       }
 
-      const buf = await this._crypto.decrypt(this._algorithm, this._superSecretKey, Uint16Array.from(numbers));
+      const buf = await this._crypto.decrypt(this._algorithm, await this._secretKey, Uint16Array.from(numbers));
       return this._decoder.decode(buf);
     }
 
     async encrypt(decrypted) {
-      await this._ready;
-      const buf = await this._crypto.encrypt(this._algorithm, this._superSecretKey, this._encoder.encode(decrypted));
+      const buf = await this._crypto.encrypt(this._algorithm, await this._secretKey, this._encoder.encode(decrypted));
       return `${this._version}:${new Uint16Array(buf).join(',')}`;
     }
 
-    async _init() {
-      /*
-       * NOTE:
-       * The idea (for now) is to just make it difficult for someone to make sense of encrypted values they might get
-       * access to. E.g. those values could be stored on `window.localStorage` or `window.sessionStorage` and it won't
-       * be possible for someone to get to the underlying data without knowing about this code here.
-       */
-      this._superSecretKey = await this._crypto.importKey(
+    /* NOTE: Do not use `async` to allow part of the function to run synchronously. */
+    _init(password) {
+      const encodedPassword = this._encoder.encode(password);
+      const encodedPadding = new Array(32 - encodedPassword.length).fill(55);
+
+      /* NOTE: Keep this check synchronous to allow `new SecretUtils(...)` to fail synchronously. */
+      if (encodedPassword.length > 32) {
+        const hiddenPassword = '*'.repeat(password.length);
+        throw new Error(`Unable to use password (${hiddenPassword}) for encryption/decryption: Too long.`);
+      }
+
+      return Promise.resolve().then(() => this._crypto.importKey(
         'raw',
-        this._encoder.encode('$NgSl@ckL1nk1fy$'),
-        this._algorithm,
+        new Uint8Array([...encodedPadding, ...encodedPassword]),
+        this._algorithm.name,
         false,
-        ['decrypt', 'encrypt']);
+        ['decrypt', 'encrypt']));
     }
   }
 
