@@ -1592,14 +1592,15 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     _postInstall() {
       const hasTokens = [this._ghUtils, this._jiraUtils].some(provider => provider.hasToken());
       const isDevVersion = this._updateUtils.isDevelopmentVersion(VERSION);
+      const hasActions = hasTokens || isDevVersion;
       const snackbarContent = Object.assign(document.createElement('div'), {
         innerHTML: `
           <b style="color: cornflowerblue;">${NAME} v${VERSION} is up and running 😎</b>
-          ${!hasTokens ? '' : `
+          ${!hasActions ? '' : `
             <small style="color: gray; display: block; margin-top: 16px;">
               Available actions:
               <ul style="margin-bottom: 0;">
-                <li><a class="nsl-install-btn-clear-tokens">Clear stored tokens</a></li>
+                ${!hasTokens ? '' : '<li><a class="nsl-install-btn-clear-tokens">Clear stored tokens</a></li>'}
                 ${!isDevVersion ? '' : '<li><a class="nsl-install-btn-cdn-update">Update from CDN</a></li>'}
               </ul>
             </small>
@@ -1650,7 +1651,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
     constructor(password) {
       this._crypto = window.crypto.subtle;
-      this._version = '1';
+      this._version = '2';
 
       this._decoder = new TextDecoder();
       this._encoder = new TextEncoder();
