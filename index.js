@@ -68,12 +68,12 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   /* Helpers */
   const hasOwnProperty = Object.prototype.hasOwnProperty.call.bind(Object.prototype.hasOwnProperty);
-
   /*
-   * Encoded entities need to be broken up, so that they are not auto-decoded, when the script is used as a bookmarklet.
-   * (NOTE: The used method for breaking up those entities should survive minification.)
+   * Encoded entities must not appear as is in the source code, because the browser may automatically decode them, when
+   * the script is used as a bookmarklet. Since minification may concatenate strings and replace constants, the `%`
+   * symbol of encoded entities are further encoded as `{{P}}` and decoded at runtime.
    */
-  const P = '%';
+  const perc = input => input.replace(/\{\{P}}/g, '%');
 
   /* Classes */
   class AbstractInfoProvider {
@@ -543,6 +543,28 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         mutations.forEach(m =>
           /* Delay processing to allow Slack complete it's own DOM manipulation (e.g. converting URLs to links). */
           m.addedNodes && setTimeout(() => this.processAll(m.addedNodes), 500)));
+
+      this._regexps = {
+        githubCommitShortRe: /(?:([\w.-]+)\/)?([\w.-]+)@([A-Fa-f\d]{7,})\b/,
+        githubCommitUrlRe: /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/commit\/([A-Fa-f\d]{7,})$/,
+        githubCommitUrlRedirRe:
+            /* eslint-disable-next-line max-len */
+            new RegExp(perc('^https://slack-redir\\.net/link\\?url=https{{P}}3A{{P}}2F{{P}}2Fgithub\\.com{{P}}2F([\\w.-]+){{P}}2F([\\w.-]+){{P}}2Fcommit{{P}}2F([A-Fa-f\\d]{7,})$')),
+
+        githubIssueShortRe: /(?:(?:([\w.-]+)\/)?([\w.-]+))?#(\d+)\b/,
+        githubIssueUrlRe: /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/(?:issues|pull)\/(\d+)$/,
+        githubIssueUrlRedirRe:
+            /* eslint-disable-next-line max-len */
+            new RegExp(perc('^https://slack-redir\\.net/link\\?url=https{{P}}3A{{P}}2F{{P}}2Fgithub\\.com{{P}}2F([\\w.-]+){{P}}2F([\\w.-]+){{P}}2F(?:issues|pull){{P}}2F(\\d+)$')),
+
+        jiraIssueShortRe: /(?<!https:\/\/angular-team\.atlassian\.net\/browse\/)\b([A-Z]+-\d+)\b/,
+        jiraIssueUrlRe: /^https:\/\/angular-team\.atlassian\.net\/browse\/([A-Z]+-\d+)$/,
+        jiraIssueUrlRedirRe:
+            /* eslint-disable-next-line max-len */
+            new RegExp(perc('^https://slack-redir\\.net/link\\?url=https{{P}}3A{{P}}2F{{P}}2Fangular-team\\.atlassian\\.net{{P}}2Fbrowse{{P}}2F([A-Z]+-\\d+)$')),
+
+        mdLinkRe: /\[([^[\]]+|[^[]*(?:\[[^\]]+][^[]*)*)]\($/,
+      };
     }
 
     cleanUp() {
@@ -604,12 +626,14 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     _processNodeGithubCommits(node) {
       const processedNodes = new Set();
 
+      const {githubCommitShortRe, githubCommitUrlRe, githubCommitUrlRedirRe} = this._regexps;
+
       const acceptNode = x => this._acceptNodeInTextNodeWalker(x);
       const treeWalker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, {acceptNode}, false);
       let t;
 
       while ((t = treeWalker.nextNode())) {
-        const textMatch = /(?:([\w.-]+)\/)?([\w.-]+)@([A-Fa-f\d]{7,})\b/.exec(t.textContent);
+        const textMatch = githubCommitShortRe.exec(t.textContent);
 
         if (textMatch) {
           const [, owner = 'angular', repo = 'angular', commit] = textMatch;
@@ -631,11 +655,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       }
 
       node.querySelectorAll(`a:not(.${CLASS_PROCESSED})`).forEach(link => {
-        const githubCommitRe = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/commit\/([A-Fa-f\d]{7,})$/;
-
-        const hrefMatch = githubCommitRe.exec(link.href) ||
-          /* eslint-disable-next-line max-len */
-          new RegExp(`^https://slack-redir\\.net/link\\?url=https${P}3A${P}2F${P}2Fgithub\\.com${P}2F([\\w.-]+)${P}2F([\\w.-]+)${P}2Fcommit${P}2F([A-Fa-f\\d]{7,})$`).exec(link.href);
+        const hrefMatch = githubCommitUrlRe.exec(link.href) || githubCommitUrlRedirRe.exec(link.href);
 
         if (hrefMatch) {
           const [, owner, repo, commit] = hrefMatch;
@@ -648,7 +668,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           processedNodes.add(link);
         }
 
-        const htmlMatch = githubCommitRe.exec(link.innerHTML);
+        const htmlMatch = githubCommitUrlRe.exec(link.innerHTML);
 
         if (htmlMatch) {
           const [, owner, repo, commit] = htmlMatch;
@@ -667,12 +687,14 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     _processNodeGithubIssues(node) {
       const processedNodes = new Set();
 
+      const {githubIssueShortRe, githubIssueUrlRe, githubIssueUrlRedirRe} = this._regexps;
+
       const acceptNode = x => this._acceptNodeInTextNodeWalker(x);
       const treeWalker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, {acceptNode}, false);
       let t;
 
       while ((t = treeWalker.nextNode())) {
-        const textMatch = /(?:(?:([\w.-]+)\/)?([\w.-]+))?#(\d+)\b/.exec(t.textContent);
+        const textMatch = githubIssueShortRe.exec(t.textContent);
 
         if (textMatch) {
           const [, owner = 'angular', repo = 'angular', issue] = textMatch;
@@ -694,11 +716,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       }
 
       node.querySelectorAll(`a:not(.${CLASS_PROCESSED})`).forEach(link => {
-        const githubIssueRe = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/(?:issues|pull)\/(\d+)$/;
-
-        const hrefMatch = githubIssueRe.exec(link.href) ||
-          /* eslint-disable-next-line max-len */
-          new RegExp(`^https://slack-redir\\.net/link\\?url=https${P}3A${P}2F${P}2Fgithub\\.com${P}2F([\\w.-]+)${P}2F([\\w.-]+)${P}2F(?:issues|pull)${P}2F(\\d+)$`).exec(link.href);
+        const hrefMatch = githubIssueUrlRe.exec(link.href) || githubIssueUrlRedirRe.exec(link.href);
 
         if (hrefMatch) {
           const [, owner, repo, issue] = hrefMatch;
@@ -711,7 +729,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           processedNodes.add(link);
         }
 
-        const htmlMatch = githubIssueRe.exec(link.innerHTML);
+        const htmlMatch = githubIssueUrlRe.exec(link.innerHTML);
 
         if (htmlMatch) {
           const [, owner, repo, issue] = htmlMatch;
@@ -733,12 +751,14 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     _processNodeJira(node) {
       const processedNodes = new Set();
 
+      const {jiraIssueShortRe, jiraIssueUrlRe, jiraIssueUrlRedirRe} = this._regexps;
+
       const acceptNode = x => this._acceptNodeInTextNodeWalker(x);
       const treeWalker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, {acceptNode}, false);
       let t;
 
       while ((t = treeWalker.nextNode())) {
-        const textMatch = /(?<!https:\/\/angular-team\.atlassian\.net\/browse\/)\b([A-Z]+-\d+)\b/.exec(t.textContent);
+        const textMatch = jiraIssueShortRe.exec(t.textContent);
 
         if (textMatch) {
           const url = `https://angular-team.atlassian.net/browse/${textMatch[1]}`;
@@ -759,11 +779,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       }
 
       node.querySelectorAll(`a:not(.${CLASS_PROCESSED})`).forEach(link => {
-        const jiraIssueRe = /^https:\/\/angular-team\.atlassian\.net\/browse\/([A-Z]+-\d+)$/;
-
-        const hrefMatch = jiraIssueRe.exec(link.href) ||
-          /* eslint-disable-next-line max-len */
-          new RegExp(`^https://slack-redir\\.net/link\\?url=https${P}3A${P}2F${P}2Fangular-team\\.atlassian\\.net${P}2Fbrowse${P}2F([A-Z]+-\\d+)$`).exec(link.href);
+        const hrefMatch = jiraIssueUrlRe.exec(link.href) || jiraIssueUrlRedirRe.exec(link.href);
 
         if (hrefMatch) {
           link.classList.add(CLASS_JIRA_LINK);
@@ -771,7 +787,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           processedNodes.add(link);
         }
 
-        const htmlMatch = jiraIssueRe.exec(link.innerHTML);
+        const htmlMatch = jiraIssueUrlRe.exec(link.innerHTML);
 
         if (htmlMatch) {
           link.innerHTML = `<b>${htmlMatch[1]}</b>`;
@@ -785,11 +801,11 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     /* Process markdown-like links. */
     _processNodeMdLinks(node) {
       const processedNodes = new Set();
+      const {mdLinkRe} = this._regexps;
 
       node.querySelectorAll(`a:not(.${CLASS_PROCESSED})`).forEach(link => {
         const prev = link.previousSibling;
-        const prevMatch = prev && (prev.nodeType === Node.TEXT_NODE) &&
-          /\[([^[\]]+|[^[]*(?:\[[^\]]+][^[]*)*)]\($/.exec(prev.textContent);
+        const prevMatch = prev && (prev.nodeType === Node.TEXT_NODE) && mdLinkRe.exec(prev.textContent);
 
         const next = prevMatch && link.nextSibling;
         const nextMatch = next ?
