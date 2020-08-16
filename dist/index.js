@@ -1,5 +1,5 @@
 javascript:/* eslint-disable-line no-unused-labels *//*
- * # NgSlackLinkifier v0.3.18
+ * # NgSlackLinkifier v0.4.0
  *
  * ## What it does
  *
@@ -58,7 +58,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   /* Constants */
   const NAME = 'NgSlackLinkifier';
-  const VERSION = '0.3.18';
+  const VERSION = '0.4.0';
 
   const CLASS_GITHUB_COMMIT_LINK = 'nsl-github-commit';
   const CLASS_GITHUB_ISSUE_LINK = 'nsl-github-issue';
@@ -1662,58 +1662,111 @@ javascript:/* eslint-disable-line no-unused-labels *//*
     }
   }
 
+  /*
+   * NOTE:
+   * Implementation inspired by Ernie Turner's presentation at Web Rebels 2018:
+   * [Dodging Web Crypto API Landmines](https://www.youtube.com/watch?v=lbt2_M1hZeg)
+   */
   class SecretUtils {
-    get ready() { return this._secretKey.then(() => this); }
+    get ready() { return this._passwordKey.then(() => this); }
 
     constructor(password) {
-      this._crypto = window.crypto.subtle;
-      this._version = '2';
+      this._crypto = window.crypto;
+      this._cryptoSub = this._crypto.subtle;
+      this._version = '3';
 
-      this._decoder = new TextDecoder();
-      this._encoder = new TextEncoder();
-      this._algorithm = {name: 'AES-CBC', iv: this._encoder.encode('SupposedlyRandom')};
+      this._pbkdf2Iterations = 250000;
+      this._pbkdf2SaltLength = 32;
+      this._aesIvLength = 12;
+      this._aesKeyLength = 256;
 
-      this._secretKey = this._init(password);
+      this._decoder = new window.TextDecoder();
+      this._encoder = new window.TextEncoder();
+
+      this._passwordKey = Promise.resolve(this._cryptoSub.importKey(
+        'raw',
+        this._encoder.encode(password),
+        'PBKDF2',
+        false,
+        ['deriveKey']));
     }
 
-    cleanUp() { /* Nothing to clean up. */ }
-
     async decrypt(encrypted) {
-      const [v, numbersStr, ...rest] = encrypted.split(':');
-      const numbers = numbersStr && numbersStr.split(',').filter(Boolean).map(Number);
+      const [version, base64Encoded, ...rest] = encrypted.split(':');
 
-      if (rest.length || !numbers || !numbers.length || numbers.some(Number.isNaN)) {
+      if (rest.length || !base64Encoded) {
         throw new Error(`Unable to decrypt \`${encrypted}\`: Invalid or unknown format.`);
-      } else if (v !== this._version) {
+      } else if (version !== this._version) {
         throw new Error(`Unable to decrypt \`${encrypted}\`: Version mismatch (expected: ${this._version}).`);
       }
 
-      const buf = await this._crypto.decrypt(this._algorithm, await this._secretKey, Uint16Array.from(numbers));
-      return this._decoder.decode(buf);
+      const encryptedBytesWithMeta = this._base64ToBytes(base64Encoded);
+      const pbkdf2Salt = encryptedBytesWithMeta.slice(0, this._pbkdf2SaltLength);
+      const aesIv = encryptedBytesWithMeta.slice(this._pbkdf2SaltLength, this._pbkdf2SaltLength + this._aesIvLength);
+
+      const decryptedBuffer = await this._cryptoSub.decrypt(
+        {name: 'AES-GCM', iv: aesIv},
+        await this._deriveAesKey(pbkdf2Salt),
+        encryptedBytesWithMeta.slice(this._pbkdf2SaltLength + this._aesIvLength));
+
+      return this._decoder.decode(decryptedBuffer);
     }
 
     async encrypt(decrypted) {
-      const buf = await this._crypto.encrypt(this._algorithm, await this._secretKey, this._encoder.encode(decrypted));
-      return `${this._version}:${new Uint16Array(buf).join(',')}`;
+      const pbkdf2Salt = this._crypto.getRandomValues(new Uint8Array(this._pbkdf2SaltLength));
+      const aesIv = this._crypto.getRandomValues(new Uint8Array(this._aesIvLength));
+
+      const encryptedBuffer = await this._cryptoSub.encrypt(
+        {name: 'AES-GCM', iv: aesIv},
+        await this._deriveAesKey(pbkdf2Salt),
+        this._encoder.encode(decrypted));
+
+      const encryptedBytes = new Uint8Array(encryptedBuffer);
+      const encryptedBytesWithMeta = Uint8Array.from([...pbkdf2Salt, ...aesIv, ...encryptedBytes]);
+
+      return `${this._version}:${this._bytesToBase64(encryptedBytesWithMeta)}`;
     }
 
-    /* NOTE: Do not use `async` to allow part of the function to run synchronously. */
-    _init(password) {
-      const encodedPassword = this._encoder.encode(password);
-      const encodedPadding = new Array(32 - encodedPassword.length).fill(55);
+    _base64ToBytes(base64String) {
+      const binaryString = atob(base64String);
+      const bytes = new Uint8Array(binaryString.length);
 
-      /* NOTE: Keep this check synchronous to allow `new SecretUtils(...)` to fail synchronously. */
-      if (encodedPassword.length > 32) {
-        const hiddenPassword = '*'.repeat(password.length);
-        throw new Error(`Unable to use password (${hiddenPassword}) for encryption/decryption: Too long.`);
+      for (let i = 0, ii = binaryString.length; i < ii; ++i) {
+        bytes[i] = binaryString.charCodeAt(i);
       }
 
-      return Promise.resolve().then(() => this._crypto.importKey(
-        'raw',
-        new Uint8Array([...encodedPadding, ...encodedPassword]),
-        this._algorithm.name,
+      return bytes;
+    }
+
+    _bytesToBase64(bytes) {
+      const binaryChars = new Array(bytes.length);
+
+      for (let i = 0, ii = bytes.length; i < ii; ++i) {
+        binaryChars[i] = String.fromCharCode(bytes[i]);
+      }
+
+      return btoa(binaryChars.join(''));
+    }
+
+    async _deriveAesKey(salt) {
+      const derivationAlgorithm = {
+        name: 'PBKDF2',
+        hash: `SHA-${this._aesKeyLength}`,
+        iterations: this._pbkdf2Iterations,
+        salt,
+      };
+
+      const derivedKeyType = {
+        name: 'AES-GCM',
+        length: this._aesKeyLength,
+      };
+
+      return this._cryptoSub.deriveKey(
+        derivationAlgorithm,
+        await this._passwordKey,
+        derivedKeyType,
         false,
-        ['decrypt', 'encrypt']));
+        ['decrypt', 'encrypt']);
     }
   }
 
