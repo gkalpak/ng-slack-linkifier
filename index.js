@@ -1691,6 +1691,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         ['deriveKey']));
     }
 
+    cleanUp() { /* Nothing to clean up. */ }
+
     async decrypt(encrypted) {
       const [version, base64Encoded, ...rest] = encrypted.split(':');
 
