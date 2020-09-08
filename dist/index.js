@@ -1,5 +1,5 @@
 javascript:/* eslint-disable-line no-unused-labels *//*
- * # NgSlackLinkifier v0.4.0
+ * # NgSlackLinkifier v0.4.1
  *
  * ## What it does
  *
@@ -58,7 +58,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   /* Constants */
   const NAME = 'NgSlackLinkifier';
-  const VERSION = '0.4.0';
+  const VERSION = '0.4.1';
 
   const CLASS_GITHUB_COMMIT_LINK = 'nsl-github-commit';
   const CLASS_GITHUB_ISSUE_LINK = 'nsl-github-issue';
@@ -1690,6 +1690,8 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         false,
         ['deriveKey']));
     }
+
+    cleanUp() { /* Nothing to clean up. */ }
 
     async decrypt(encrypted) {
       const [version, base64Encoded, ...rest] = encrypted.split(':');
