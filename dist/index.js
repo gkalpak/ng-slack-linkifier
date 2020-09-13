@@ -1,5 +1,5 @@
 javascript:/* eslint-disable-line no-unused-labels *//*
- * # NgSlackLinkifier v0.4.1
+ * # NgSlackLinkifier v0.4.2
  *
  * ## What it does
  *
@@ -58,7 +58,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   /* Constants */
   const NAME = 'NgSlackLinkifier';
-  const VERSION = '0.4.1';
+  const VERSION = '0.4.2';
 
   const CLASS_GITHUB_COMMIT_LINK = 'nsl-github-commit';
   const CLASS_GITHUB_ISSUE_LINK = 'nsl-github-issue';
@@ -610,6 +610,38 @@ javascript:/* eslint-disable-line no-unused-labels *//*
         NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
     }
 
+    _getEffectiveSiblingTextNode(node, nextSibling) {
+      /*
+       * Normally, we would use `previousSibling/nextSibling`. In some cases, however, the effective sibling text nodes
+       * may be wrapped in `<b>` and/or `<i>` elements. We "unwrap" these to get to the actual text node.
+       */
+
+      const ignorableTags = ['B', 'I'];
+      const canIgnore = elem =>
+        ignorableTags.includes(elem.tagName) &&
+        ((elem.childNodes.length === 1) ||
+          (elem.childElementCount === 1) &&
+          (elem.textContent.trim() === elem.firstElementChild.textContent.trim()));
+
+      const siblingProp = nextSibling ? 'nextSibling' : 'previousSibling';
+      let sibling = node[siblingProp];
+
+      if (!sibling) {
+        while (canIgnore(node.parentNode)) {
+          node = node.parentNode;
+        }
+        sibling = node[siblingProp];
+      }
+
+      if (sibling) {
+        while (canIgnore(sibling)) {
+          sibling = sibling.firstElementChild || sibling.firstChild;
+        }
+      }
+
+      return (sibling && (sibling.nodeType === Node.TEXT_NODE)) ? sibling : null;
+    }
+
     _processNode(node, forcePostProcess) {
       const processedNodes = new Set([
         ...this._processNodeMdLinks(node),
@@ -804,14 +836,14 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       const {mdLinkRe} = this._regexps;
 
       node.querySelectorAll(`a:not(.${CLASS_PROCESSED})`).forEach(link => {
-        const prev = link.previousSibling;
-        const prevMatch = prev && (prev.nodeType === Node.TEXT_NODE) && mdLinkRe.exec(prev.textContent);
+        const prev = this._getEffectiveSiblingTextNode(link, false);
+        const prevMatch = prev && mdLinkRe.exec(prev.textContent);
 
-        const next = prevMatch && link.nextSibling;
+        const next = prevMatch && this._getEffectiveSiblingTextNode(link, true);
         const nextMatch = next ?
-          ((next.nodeType === Node.TEXT_NODE) && /^\)/.exec(next.textContent)) :
+          /^\)/.exec(next.textContent) :
           /* Truncated link in message attachment (e.g. by GeekBot). Requires special handling. */
-          (link.lastChild && (link.lastChild.textContent === '…') && true);
+          (link.lastChild && (link.lastChild.textContent === '…'));
 
         if (nextMatch) {
           link.childNodes.forEach(n => n.textContent = '');
