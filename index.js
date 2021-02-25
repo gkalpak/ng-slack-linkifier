@@ -1124,7 +1124,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
       const info = await this._ghUtils.getCommitInfo(owner, repo, commit);
       const subject = info.message.split('\n', 1).pop();
-      const body = info.message.slice(subject.length).trim();
+      const body = this._uiUtils.escapeHtml(info.message.slice(subject.length).trim());
 
       return `
         <p style="
@@ -1156,6 +1156,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       const tooLargeDiff = 'Diff too large to display...';
 
       const fileToHtml = file => {
+        /* TODO: Would `UiUtils#escapeHtml()` work here instead? */
         const escapedHtml = (file.patch === null) ? tooLargeDiff : file.patch.
           replace(/&/g, '&amp;').
           replace(/'/g, '&apos;').
@@ -1253,7 +1254,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
       const info = await this._ghUtils.getIssueInfo(owner, repo, number);
       const prInfo = info.prInfo;
-      const description = info.description.replace(/^<!--[^]*?-->\s*/, '');
+      const description = this._uiUtils.escapeHtml(info.description.replace(/^<!--[^]*?-->\s*/, ''));
 
       const filesContent = !info.isPr ?
         '' :
@@ -1440,7 +1441,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
           </span>
         </p>
         <pre style="margin-top: 24px; white-space: normal;">
-          ${info.description || '<i style="color: gray;">No description.</i>'}
+          ${this._uiUtils.escapeHtml(info.description) || '<i style="color: gray;">No description.</i>'}
         </pre>
         <hr />
         <p>
