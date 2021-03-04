@@ -1,5 +1,5 @@
 javascript:/* eslint-disable-line no-unused-labels *//*
- * # NgSlackLinkifier v0.4.3
+ * # NgSlackLinkifier v0.4.4
  *
  * ## What it does
  *
@@ -58,7 +58,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
   /* Constants */
   const NAME = 'NgSlackLinkifier';
-  const VERSION = '0.4.3';
+  const VERSION = '0.4.4';
 
   const CLASS_GITHUB_COMMIT_LINK = 'nsl-github-commit';
   const CLASS_GITHUB_ISSUE_LINK = 'nsl-github-issue';
@@ -1123,7 +1123,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
       const commit = data.nslCommit;
 
       const info = await this._ghUtils.getCommitInfo(owner, repo, commit);
-      const subject = info.message.split('\n', 1).pop();
+      const subject = this._uiUtils.escapeHtml(info.message.split('\n', 1).pop());
       const body = this._uiUtils.escapeHtml(info.message.slice(subject.length).trim());
 
       return `
@@ -1254,6 +1254,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
 
       const info = await this._ghUtils.getIssueInfo(owner, repo, number);
       const prInfo = info.prInfo;
+      const title = this._uiUtils.escapeHtml(info.title);
       const description = this._uiUtils.escapeHtml(info.description.replace(/^<!--[^]*?-->\s*/, ''));
 
       const filesContent = !info.isPr ?
@@ -1298,7 +1299,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
               ">
             ${info.state.toUpperCase()}
           </span>
-          <b style="flex: auto;">${info.title}</b>
+          <b style="flex: auto;">${title}</b>
           <span style="color: gray; margin-left: 30px; white-space: nowrap;">
             <span style="color: lightgray;">${info.isPr ? 'PR' : 'Issue'}:</span>
             #${info.number}
@@ -1347,7 +1348,7 @@ javascript:/* eslint-disable-line no-unused-labels *//*
             <span style="flex: auto; ${isClosed ? 'text-decoration: line-through;' : ''}">
               <a href="${issue.url}" target="_blank" style="display: flex;">
                 <b style="white-space: nowrap;">${issue.number}:&ensp;</b>
-                ${issue.title}
+                ${this._uiUtils.escapeHtml(issue.title)}
               </a>
             </span>
             <small style="
